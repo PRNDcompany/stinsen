@@ -311,7 +311,7 @@ public extension NavigationCoordinatable {
     }
     
     func dismissCoordinator(_ action: (() -> ())?) {
-        stack.parent!.dismissChild(coordinator: self, action: action)
+        stack.parent?.dismissChild(coordinator: self, action: action)
     }
     
     internal func setupRoot() {

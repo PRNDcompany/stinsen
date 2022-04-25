@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
+
 struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     var coordinator: T
     private let id: Int
@@ -12,46 +13,41 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     var start: AnyView?
 
     var body: some View {
-        #if os(macOS)
         commonView
             .environmentObject(router)
-        #else
-        if #available(iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
-            commonView
-                .environmentObject(router)
-                .background(
-                    // WORKAROUND for iOS < 14.5
-                    // A bug hinders us from using modal and fullScreenCover on the same view
-                    Color
-                        .clear
-                        .fullScreenCover(isPresented: Binding<Bool>.init(get: { () -> Bool in
-                            return presentationHelper.presented?.type.isFullScreen == true
-                        }, set: { _ in
-                            self.coordinator.appear(self.id)
-                        }), onDismiss: {
-                            self.coordinator.stack.dismissalAction[id]?()
-                            self.coordinator.stack.dismissalAction[id] = nil
-                        }, content: { () -> AnyView in
-                            return { () -> AnyView in
-                                if let view = presentationHelper.presented?.view {
-                                    return AnyView(view)
-                                } else {
-                                    return AnyView(EmptyView())
-                                }
-                            }()
-                        })
-                        .environmentObject(router)
-                )
-        } else {
-            commonView
-                .environmentObject(router)
-        }
-        #endif
     }
-    
+
+
+    @ViewBuilder
+    var rootView: some View {
+        if  id == -1 {
+            AnyView(coordinator.customize(AnyView(root.item.child.view())))
+        } else if let start = self.start {
+            start
+        } else {
+            EmptyView()
+        }
+    }
+
     @ViewBuilder
     var commonView: some View {
-        (id == -1 ? AnyView(self.coordinator.customize(AnyView(root.item.child.view()))) : AnyView(self.start!))
+        StinsenConfigure
+            .shared
+            .navigationModifier(
+                rootView: rootView,
+                presented: presentationHelper.presented,
+                id: id,
+                appear: { coordinator.appear($0) },
+                dismissalAction: {
+                    coordinator.stack.dismissalAction[id]?()
+                    coordinator.stack.dismissalAction[id] = nil
+                })
+            .present(presented: presentationHelper.presented,
+                     appear: { coordinator.appear(id) },
+                     dismissalAction: {
+                coordinator.stack.dismissalAction[id]?()
+                coordinator.stack.dismissalAction[id] = nil
+            })
             .background(
                 NavigationLink(
                     destination: { () -> AnyView in
@@ -64,24 +60,19 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
                             return AnyView(EmptyView())
                         }
                     }(),
-                    isActive: Binding<Bool>.init(get: { () -> Bool in
-                        return presentationHelper.presented?.type.isPush == true
-                    }, set: { _ in
-                        self.coordinator.appear(self.id)
-                    }),
-                    label: {
-                        EmptyView()
+                    isActive: Binding<Bool>(get: { presentationHelper.presented?.type is PushPresentation },
+                                            set: { _ in coordinator.appear(id) }),
+                    label: { // Zero View 필요
+                        Color.white.frame(width: 0, height: 0)
                     }
                 )
                 .hidden()
             )
-            .sheet(isPresented: Binding<Bool>.init(get: { () -> Bool in
-                return presentationHelper.presented?.type.isModal == true
-            }, set: { _ in
-                self.coordinator.appear(self.id)
-            }), onDismiss: {
-                self.coordinator.stack.dismissalAction[id]?()
-                self.coordinator.stack.dismissalAction[id] = nil
+            .sheet(isPresented: Binding<Bool>(get: { presentationHelper.presented?.type is ModalPresentation },
+                                              set: { _ in coordinator.appear(id) }),
+                   onDismiss: {
+                coordinator.stack.dismissalAction[id]?()
+                coordinator.stack.dismissalAction[id] = nil
             }, content: { () -> AnyView in
                 return { () -> AnyView in
                     if let view = presentationHelper.presented?.view {
@@ -126,5 +117,28 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
         } else {
             fatalError()
         }
+    }
+}
+
+
+
+// MARK: - uikit present
+extension View {
+    func present(presented: Presented?, appear: @escaping () -> Void, dismissalAction: (() -> Void)? ) -> some View {
+#if os(iOS)
+        background(UIKitIntrospectionViewController(selector: { $0.parent }) {
+            guard let presentationType = presented?.type as? UIKitPresentationType,
+                  let content = presented?.view else { return }
+
+            presentationType.presented(parent: $0, content: content.onDisappear {
+                // NOTE: - appear, dismissalAction 시점 변화가 필요할지도 모르겠다.
+                // presented: Presented 부분을 Binding으로 변경해야할 가능성도 있음 기존 NavigationLink, sheet 와 비슷하게
+                appear()
+                dismissalAction?()
+            })
+        })
+#else
+        self
+#endif
     }
 }
