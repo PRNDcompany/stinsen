@@ -128,7 +128,11 @@ extension View {
 #if os(iOS)
         background(UIKitIntrospectionViewController(selector: { $0.parent }) {
             guard let presentationType = presented?.type as? UIKitPresentationType,
-                  let content = presented?.view else { return }
+                  let content = presented?.view else {
+                // NOTE: - 추가 로직이 필요할까?
+                viewController.presentedViewController?.dismiss(animated: true)
+                return
+            }
 
             presentationType.presented(parent: $0, content: content.onDisappear {
                 // NOTE: - appear, dismissalAction 시점 변화가 필요할지도 모르겠다.
