@@ -126,7 +126,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 extension View {
     func present(presented: Presented?, appear: @escaping () -> Void, dismissalAction: (() -> Void)? ) -> some View {
 #if os(iOS)
-        background(UIKitIntrospectionViewController(selector: { $0.parent }) {
+        background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard let presentationType = presented?.type as? UIKitPresentationType,
                   let content = presented?.view else {
                 // NOTE: - 추가 로직이 필요할까?
@@ -134,7 +134,7 @@ extension View {
                 return
             }
 
-            presentationType.presented(parent: $0, content: content.onDisappear {
+            presentationType.presented(parent: viewController, content: content.onDisappear {
                 // NOTE: - appear, dismissalAction 시점 변화가 필요할지도 모르겠다.
                 // presented: Presented 부분을 Binding으로 변경해야할 가능성도 있음 기존 NavigationLink, sheet 와 비슷하게
                 appear()
