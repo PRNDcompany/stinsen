@@ -129,8 +129,10 @@ extension View {
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard let presentationType = presented?.type as? UIKitPresentationType,
                   let content = presented?.view else {
-                // NOTE: - 추가 로직이 필요할까?
-                viewController.presentedViewController?.dismiss(animated: true)
+                if presented == nil {
+                    // NOTE: - 추가 로직이 필요할까?
+                    viewController.presentedViewController?.dismiss(animated: true)
+                }
                 return
             }
 
