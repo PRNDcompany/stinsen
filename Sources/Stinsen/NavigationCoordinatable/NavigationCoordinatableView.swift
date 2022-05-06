@@ -131,7 +131,9 @@ extension View {
             }
 
             isUIKitPresented.wrappedValue = true
-            presentationType.presented(parent: viewController, content: content.onDisappear {
+            presentationType.presented(parent: viewController, content: content.onDisappear { [weak viewController] in
+                // NOTE: - presentedViewController 사라지면 dissmiss 완료
+                guard viewController?.presentedViewController == nil else { return }
                 // NOTE: - appear, dismissalAction 시점 변화가 필요할지도 모르겠다.
                 // presented: Presented 부분을 Binding으로 변경해야할 가능성도 있음 기존 NavigationLink, sheet 와 비슷하게
                 appear()
