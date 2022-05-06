@@ -9,7 +9,7 @@ public struct FullScreenPresentation: PresentationType {
     public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented {
         if #available(iOS 14, tvOS 14, watchOS 7, *) {
             if presentable is AnyView {
-                let view = AnyView(StinsenConfigure.shared.navigationCoordinatableView(id: nextId, coordinator: coordinator))
+                let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
 
 #if os(macOS)
                 return Presented(

@@ -9,7 +9,9 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     private let router: NavigationRouter<T>
     @ObservedObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
-    
+
+    @State var isUIKitPresented: Bool = false
+
     var start: AnyView?
 
     var body: some View {
@@ -31,18 +33,9 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 
     @ViewBuilder
     var commonView: some View {
-        StinsenConfigure
-            .shared
-            .navigationModifier(
-                rootView: rootView,
-                presented: presentationHelper.presented,
-                id: id,
-                appear: { coordinator.appear($0) },
-                dismissalAction: {
-                    coordinator.stack.dismissalAction[id]?()
-                    coordinator.stack.dismissalAction[id] = nil
-                })
-            .present(presented: presentationHelper.presented,
+        rootView
+            .present(isUIKitPresented: $isUIKitPresented,
+                     presented: presentationHelper.presented,
                      appear: { coordinator.appear(id) },
                      dismissalAction: {
                 coordinator.stack.dismissalAction[id]?()
@@ -124,18 +117,20 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 
 // MARK: - uikit present
 extension View {
-    func present(presented: Presented?, appear: @escaping () -> Void, dismissalAction: (() -> Void)? ) -> some View {
+    func present(isUIKitPresented: Binding<Bool>, presented: Presented?, appear: @escaping () -> Void, dismissalAction: (() -> Void)? ) -> some View {
 #if os(iOS)
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard let presentationType = presented?.type as? UIKitPresentationType,
                   let content = presented?.view else {
-                if presented == nil {
-                    // NOTE: - 추가 로직이 필요할까?
+                if isUIKitPresented.wrappedValue {
+                    // NOTE: - Coordinator 로 popLast 호출될 때 dissmiss 가 필요.
+                    isUIKitPresented.wrappedValue = false
                     viewController.presentedViewController?.dismiss(animated: true)
                 }
                 return
             }
 
+            isUIKitPresented.wrappedValue = true
             presentationType.presented(parent: viewController, content: content.onDisappear {
                 // NOTE: - appear, dismissalAction 시점 변화가 필요할지도 모르겠다.
                 // presented: Presented 부분을 Binding으로 변경해야할 가능성도 있음 기존 NavigationLink, sheet 와 비슷하게

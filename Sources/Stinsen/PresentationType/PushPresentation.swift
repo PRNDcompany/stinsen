@@ -8,7 +8,7 @@ public struct PushPresentation: PresentationType {
 
     public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented {
         if presentable is AnyView {
-            let view = AnyView(StinsenConfigure.shared.navigationCoordinatableView(id: nextId, coordinator: coordinator))
+            let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
 
             return Presented(
                 view: view,
