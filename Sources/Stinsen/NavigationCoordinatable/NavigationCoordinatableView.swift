@@ -41,26 +41,34 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
                 coordinator.stack.dismissalAction[id]?()
                 coordinator.stack.dismissalAction[id] = nil
             })
-            .background(
-                NavigationLink(
-                    destination: { () -> AnyView in
-                        if let view = presentationHelper.presented?.view {
-                            return AnyView(view.onDisappear {
-                                self.coordinator.stack.dismissalAction[id]?()
-                                self.coordinator.stack.dismissalAction[id] = nil
-                            })
-                        } else {
-                            return AnyView(EmptyView())
-                        }
-                    }(),
-                    isActive: Binding<Bool>(get: { presentationHelper.presented?.type is PushPresentation },
-                                            set: { _ in coordinator.appear(id) }),
-                    label: { // Zero View 필요
-                        Color.white.frame(width: 0, height: 0)
-                    }
-                )
-                .hidden()
-            )
+            .background(navigationLink)
+            .background(sheet)
+    }
+
+    var navigationLink: some View {
+        NavigationLink(
+            destination: { () -> AnyView in
+                if let view = presentationHelper.presented?.view {
+                    return AnyView(view.onDisappear {
+                        self.coordinator.stack.dismissalAction[id]?()
+                        self.coordinator.stack.dismissalAction[id] = nil
+                    })
+                } else {
+                    return AnyView(EmptyView())
+                }
+            }(),
+            isActive: Binding<Bool>(get: { presentationHelper.presented?.type is PushPresentation },
+                                    set: { _ in coordinator.appear(id) }),
+            label: { // Zero View 필요
+                Color.white.frame(width: 0, height: 0)
+            }
+        )
+        .hidden()
+    }
+
+    var sheet: some View {
+        Color.clear
+            .hidden()
             .sheet(isPresented: Binding<Bool>(get: { presentationHelper.presented?.type is ModalPresentation },
                                               set: { _ in coordinator.appear(id) }),
                    onDismiss: {
