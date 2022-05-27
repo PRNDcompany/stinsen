@@ -9,17 +9,17 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     private let router: NavigationRouter<T>
     @ObservedObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
-
-    @State var isUIKitPresented: Bool = false
-
+    
+    @State var isUIKitPresented: UIKitPresentationType?
+    
     var start: AnyView?
-
+    
     var body: some View {
         commonView
             .environmentObject(router)
     }
-
-
+    
+    
     @ViewBuilder
     var rootView: some View {
         if  id == -1 {
@@ -30,65 +30,72 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
             EmptyView()
         }
     }
-
+    
     @ViewBuilder
     var commonView: some View {
         rootView
-            .present(isUIKitPresented: $isUIKitPresented,
-                     presented: presentationHelper.presented,
-                     appear: { coordinator.appear(id) },
-                     dismissalAction: {
-                coordinator.stack.dismissalAction[id]?()
-                coordinator.stack.dismissalAction[id] = nil
-            })
+            .present(
+                isUIKitPresented: $isUIKitPresented,
+                presented: presentationHelper.presented,
+                appear: { coordinator.appear(id) },
+                dismissalAction: {
+                    coordinator.stack.dismissalAction[id]?()
+                    coordinator.stack.dismissalAction[id] = nil
+                }
+            )
             .background(navigationLink)
             .background(sheet)
     }
-
+    
     var navigationLink: some View {
         NavigationLink(
             destination: { () -> AnyView in
                 if let view = presentationHelper.presented?.view {
                     return AnyView(view.onDisappear {
-                        self.coordinator.stack.dismissalAction[id]?()
-                        self.coordinator.stack.dismissalAction[id] = nil
+                        coordinator.stack.dismissalAction[id]?()
+                        coordinator.stack.dismissalAction[id] = nil
                     })
                 } else {
                     return AnyView(EmptyView())
                 }
             }(),
-            isActive: Binding<Bool>(get: { presentationHelper.presented?.type is PushPresentation },
-                                    set: { _ in coordinator.appear(id) }),
+            isActive: Binding<Bool>(
+                get: { presentationHelper.presented?.type is PushPresentation },
+                set: { _ in coordinator.appear(id) }
+            ),
             label: { // Zero View 필요
                 Color.white.frame(width: 0, height: 0)
             }
         )
         .hidden()
     }
-
+    
     var sheet: some View {
         Color.clear
             .hidden()
-            .sheet(isPresented: Binding<Bool>(get: { presentationHelper.presented?.type is ModalPresentation },
-                                              set: { _ in coordinator.appear(id) }),
-                   onDismiss: {
-                coordinator.stack.dismissalAction[id]?()
-                coordinator.stack.dismissalAction[id] = nil
-            }, content: { () -> AnyView in
-                return { () -> AnyView in
-                    if let view = presentationHelper.presented?.view {
-                        return AnyView(view)
-                    } else {
-                        return AnyView(EmptyView())
-                    }
-                }()
-            })
+            .sheet(
+                isPresented: Binding<Bool>(
+                    get: { presentationHelper.presented?.type is ModalPresentation },
+                    set: { _ in coordinator.appear(id) }
+                ),
+                onDismiss: {
+                    coordinator.stack.dismissalAction[id]?()
+                    coordinator.stack.dismissalAction[id] = nil
+                },
+                content: { () -> AnyView in
+                    return { () -> AnyView in
+                        if let view = presentationHelper.presented?.view {
+                            return AnyView(view)
+                        } else {
+                            return AnyView(EmptyView())
+                        }
+                    }()
+                })
     }
     
     init(id: Int, coordinator: T) {
         self.id = id
         self.coordinator = coordinator
-        
         self.presentationHelper = PresentationHelper(
             id: self.id,
             coordinator: coordinator
@@ -104,7 +111,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
         }
         
         self.root = coordinator.stack.root
-
+        
         RouterStore.shared.store(router: router)
         
         if let presentation = coordinator.stack.value[safe: id] {
@@ -125,21 +132,21 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 
 // MARK: - uikit present
 extension View {
-    func present(isUIKitPresented: Binding<Bool>, presented: Presented?, appear: @escaping () -> Void, dismissalAction: @escaping () -> Void) -> some View {
+    func present(isUIKitPresented: Binding<UIKitPresentationType?>, presented: Presented?, appear: @escaping () -> Void, dismissalAction: @escaping () -> Void) -> some View {
 #if os(iOS)
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard let presentationType = presented?.type as? UIKitPresentationType,
                   let content = presented?.view else {
-                if isUIKitPresented.wrappedValue {
+                if isUIKitPresented.wrappedValue != nil {
                     // NOTE: - Coordinator 로 popLast 호출될 때 dissmiss 가 필요.
-                    isUIKitPresented.wrappedValue = false
-                    viewController.presentedViewController?.dismiss(animated: true)
+                    isUIKitPresented.wrappedValue?.dismissed(parent: viewController)
+                    isUIKitPresented.wrappedValue = nil
                 }
                 return
             }
-
-            isUIKitPresented.wrappedValue = true
-
+            
+            isUIKitPresented.wrappedValue = presentationType
+            
             // navigationPush 가 일어나면 onDisapper가 이미 발생함.
             presentationType.presented(
                 parent: viewController,
@@ -170,17 +177,17 @@ extension View {
 
 private class LifeCicleView: UIView {
     var onDeinit: (() -> Void)?
-
+    
     deinit {
         onDeinit?()
     }
-
+    
     required init() {
         super.init(frame: .zero)
         isHidden = true
         isUserInteractionEnabled = false
     }
-
+    
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
