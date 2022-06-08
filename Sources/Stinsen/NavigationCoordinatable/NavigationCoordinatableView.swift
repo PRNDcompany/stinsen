@@ -68,6 +68,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
             }
         )
         .hidden()
+        .background(osBugHelperView)
     }
     
     var sheet: some View {
@@ -128,7 +129,12 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     }
 }
 
-
+extension NavigationCoordinatableView {
+    /// NOTE: iOS 14 bug `https://stackoverflow.com/questions/66559814/swiftui-navigationlink-pops-out-by-itself`
+    var osBugHelperView: some View {
+        NavigationLink(destination: EmptyView()) { EmptyView() }.hidden()
+    }
+}
 
 // MARK: - uikit present
 extension View {
