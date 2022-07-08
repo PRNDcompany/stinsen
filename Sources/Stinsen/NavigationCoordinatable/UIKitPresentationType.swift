@@ -9,7 +9,7 @@ import SwiftUI
 
 #if os(iOS)
 public protocol UIKitPresentationType: PresentationType {
-    func presented<Content: View>(parent: UIViewController, content: Content?)
-    func dismissed(parent: UIViewController)
+    func presented<Content: View>(parent: UIViewController, content: Content?, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void)
+    func dismissed(viewController: UIViewController)
 }
 #endif
