@@ -1,11 +1,27 @@
 import SwiftUI
 
-public struct Presented {
-    public var view: AnyView
-    public var type: PresentationType
 
-    public init(view: AnyView, type: PresentationType) {
-        self.view = view
-        self.type = type
+
+public enum Presented {
+
+    case view(ViewPresented)
+    case viewController(ViewControllerPresented)
+
+    public var view: AnyView {
+        switch self {
+        case let .view(presented):
+            return presented.view
+        case .viewController:
+            return AnyView(EmptyView())
+        }
+    }
+
+    public var type: PresentationType {
+        switch self {
+        case let .view(presented):
+            return presented.presentationType
+        case let .viewController(presented):
+            return presented.presentationType
+        }
     }
 }

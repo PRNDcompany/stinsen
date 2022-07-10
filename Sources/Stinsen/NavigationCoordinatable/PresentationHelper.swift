@@ -16,7 +16,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         
         // Only apply updates on last screen in navigation stack
         // This check is important to get the behaviour as using a bool-state in the view that you set
-        if value.count - 1 == nextId, self.presented == nil {
+        if value.count - 1 == nextId, presented == nil {
             if let value = value[safe: nextId] {
                 let presentable = value.presentable
                 presented = value.presentationType
@@ -43,9 +43,16 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         navigationStack.poppedTo.filter { int -> Bool in int <= id }.sink { [weak self] int in
             // remove any and all presented views if my id is less than or equal to the view being popped to!
             DispatchQueue.main.async { [weak self] in
-                self?.presented = nil
+                self?.removePresented()
             }
         }
         .store(in: &cancellables)
+    }
+
+    func removePresented() {
+        if case let .viewController(presented) = presented {
+            presented.dismiss()
+        }
+        presented = nil
     }
 }

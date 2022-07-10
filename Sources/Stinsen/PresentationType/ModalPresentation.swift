@@ -4,39 +4,45 @@ import SwiftUI
 
 public struct ModalPresentation: PresentationType {
     public init() { }
-
+    
     public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented {
         if presentable is AnyView {
             let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
-
-            #if os(macOS)
-            return Presented(
-                view: AnyView(
-                    NavigationView(
-                        content: {
-                            view
-                        }
-                    )
-                ),
-                type: ModalPresentation()
+            
+#if os(macOS)
+            return .view(
+                ViewPresented(
+                    view: AnyView(
+                        NavigationView(
+                            content: {
+                                view
+                            }
+                        )
+                    ),
+                    presentationType: ModalPresentation()
+                )
             )
-            #else
-            return Presented(
-                view: AnyView(
-                    NavigationView(
-                        content: {
-                            view.navigationBarHidden(true)
-                        }
-                    )
-                    .navigationViewStyle(StackNavigationViewStyle())
-                ),
-                type: ModalPresentation()
+#else
+            return .view(
+                ViewPresented(
+                    view: AnyView(
+                        NavigationView(
+                            content: {
+                                view.navigationBarHidden(true)
+                            }
+                        )
+                        .navigationViewStyle(StackNavigationViewStyle())
+                    ),
+                    presentationType: ModalPresentation()
+                )
             )
-            #endif
+#endif
         } else {
-            return Presented(
-                view: presentable.view(),
-                type: ModalPresentation()
+            return .view(
+                ViewPresented(
+                    view: presentable.view(),
+                    presentationType: ModalPresentation()
+                )
             )
         }
     }

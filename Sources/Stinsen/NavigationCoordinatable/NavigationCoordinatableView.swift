@@ -10,7 +10,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     @ObservedObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
     
-    @State var isUIKitPresented: UIKitPresentationType?
+    @State var isUIKitPresented: ViewControllerPresented?
     
     var start: AnyView?
     
@@ -35,7 +35,6 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     var commonView: some View {
         rootView
             .present(
-                isUIKitPresented: $isUIKitPresented,
                 presented: presentationHelper.presented,
                 onAppear: { coordinator.appear(id) },
                 onDismiss: {
@@ -140,27 +139,29 @@ extension NavigationCoordinatableView {
 
 // MARK: - uikit present
 extension View {
-    func present(isUIKitPresented: Binding<UIKitPresentationType?>, presented: Presented?, onAppear: @escaping () -> Void, onDismiss: @escaping () -> Void) -> some View {
+    func present(presented: Presented?, onAppear: @escaping () -> Void, onDismiss: @escaping () -> Void) -> some View {
 #if os(iOS)
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
-            guard let presentationType = presented?.type as? UIKitPresentationType,
-                  let content = presented?.view else {
-                if isUIKitPresented.wrappedValue != nil, let vc = viewController.presentedViewController {
-                    // NOTE: - Coordinator 로 popLast 호출될 때 dissmiss 가 필요.
-                    isUIKitPresented.wrappedValue?.dismissed(viewController: vc)
-                    isUIKitPresented.wrappedValue = nil
-                }
+            guard case let .viewController(uiKitPresented) = presented else { return }
+
+            guard let destination = uiKitPresented.viewController else {
+                print("wani.notvc")
                 return
             }
-            
-            isUIKitPresented.wrappedValue = presentationType
+            print("wani.presented:\(destination)")
+            guard destination.presentingViewController == nil else {
+                print("wani", destination.presentingViewController)
+                return
+            }
+
             // navigationPush 가 일어나면 onDisapper가 이미 발생함.
-            presentationType.presented(
+            let target = uiKitPresented.presentationType.presented(
                 parent: viewController,
-                content: content,
+                content: destination,
                 onAppeared: onAppear,
                 onDissmissed: onDismiss
             )
+
         })
 #else
         self

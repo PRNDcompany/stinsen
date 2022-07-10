@@ -12,6 +12,7 @@ import SwiftUI
 #if os(iOS)
 public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresentationType {
 
+
     public typealias MakeUIViewControllerHandler = (_ content: AnyView, _ dissmissHandler: @escaping () -> Void) -> ViewController
     public typealias DismissHandler = (_ viewController: UIViewController) -> Void
     public typealias PresentHandler = (_ parent: UIViewController, _ viewController: ViewController) -> Void
@@ -51,50 +52,23 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented {
         if presentable is AnyView {
             let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
-            
-            return Presented(
-                view: view,
-                type: self
+            return .viewController(
+                ViewControllerPresented(
+                    viewController: makeViewController(content: view),
+                    presentationType: self
+                )
             )
         } else {
-            return Presented(
-                view: presentable.view(),
-                type: self
+            return .viewController(
+                ViewControllerPresented(
+                    viewController: makeViewController(content: presentable.view()),
+                    presentationType: self
+                )
             )
         }
     }
 
-    public func presented<Content: View>(
-        parent: UIViewController,
-        content: Content?,
-        onAppeared: @escaping () -> Void,
-        onDissmissed: @escaping () -> Void
-    ) {
-        guard let content = content else {
-            return
-        }
-
-        let viewController = makeUIViewController(content: content)
-        let lifeCicleView = LifeCicleView()
-        lifeCicleView.onDeinit = {
-            onDissmissed()
-            onAppeared()
-        }
-        viewController.view.insertSubview(lifeCicleView, at: 0)
-
-        presentHandler(
-            parent,
-            viewController
-        )
-        
-    }
-
-    public func dismissed(viewController: UIViewController) {
-        dismissHandler(viewController)
-    }
-
-
-    private func makeUIViewController<Content: View>(content: Content) -> ViewController {
+    public func makeViewController<Content>(content: Content) -> UIViewController where Content : View {
         weak var dismissViewController: UIViewController!
         let viewController = makeUIViewController(AnyView(content), {
             dismissed(viewController: dismissViewController)
@@ -102,6 +76,26 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         dismissViewController = viewController
         return viewController
     }
+
+    public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
+        let lifeCicleView = LifeCicleView()
+        lifeCicleView.onDeinit = {
+            onDissmissed()
+            onAppeared()
+        }
+        content.view.insertSubview(lifeCicleView, at: 0)
+
+        presentHandler(
+            parent,
+            content as! ViewController
+        )
+
+    }
+
+    public func dismissed(viewController: UIViewController) {
+        dismissHandler(viewController)
+    }
+
 }
 #endif
 

@@ -9,7 +9,49 @@ import SwiftUI
 
 #if os(iOS)
 public protocol UIKitPresentationType: PresentationType {
-    func presented<Content: View>(parent: UIViewController, content: Content?, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void)
+    func makeViewController<Content: View>(content: Content) -> UIViewController
+    func presented(parent: UIViewController,
+                   content: UIViewController,
+                   onAppeared: @escaping () -> Void,
+                   onDissmissed: @escaping () -> Void)
     func dismissed(viewController: UIViewController)
+}
+
+public struct ViewPresented {
+    var view: AnyView
+    var presentationType: PresentationType
+
+    init(view: AnyView, presentationType: PresentationType) {
+        self.view = view
+        self.presentationType = presentationType
+    }
+}
+
+public final class ViewControllerPresented {
+
+    init(
+        viewController: UIViewController? = nil,
+        presentationType: UIKitPresentationType
+    ) {
+        self.presentationType = presentationType
+        self.strontViewController = viewController
+        self.weakViewController = viewController
+    }
+
+    var presentationType: UIKitPresentationType
+
+    var viewController: UIViewController? {
+        defer { strontViewController = nil }
+        return weakViewController
+    }
+
+    private var strontViewController: UIViewController?
+    private weak var weakViewController: UIViewController?
+
+    func dismiss() {
+        viewController.map {
+            presentationType.dismissed(viewController: $0)
+        }
+    }
 }
 #endif
