@@ -144,13 +144,8 @@ extension View {
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard case let .viewController(uiKitPresented) = presented else { return }
 
-            guard let destination = uiKitPresented.viewController else {
-                print("wani.notvc")
-                return
-            }
-            print("wani.presented:\(destination)")
-            guard destination.presentingViewController == nil else {
-                print("wani", destination.presentingViewController)
+            guard let destination = uiKitPresented.viewController,
+                  destination.presentingViewController == nil else {
                 return
             }
 
