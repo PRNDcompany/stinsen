@@ -144,22 +144,27 @@ extension View {
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard case let .viewController(uiKitPresented) = presented else { return }
 
-            guard let destination = uiKitPresented.viewController,
-                  destination.presentingViewController == nil else {
+            guard let destination = uiKitPresented.viewController, !destination.isPresented else {
                 return
             }
 
-            // navigationPush 가 일어나면 onDisapper가 이미 발생함.
-            let target = uiKitPresented.presentationType.presented(
+            uiKitPresented.presentationType.presented(
                 parent: viewController,
                 content: destination,
                 onAppeared: onAppear,
                 onDissmissed: onDismiss
             )
-
         })
 #else
         self
 #endif
+    }
+}
+
+
+extension UIViewController {
+    // NOTE: - parent는 NavigationController, presentingViewController SheetModal 의 경우 상태 확인을 한다.
+    var isPresented: Bool {
+        parent != nil || presentingViewController != nil
     }
 }
