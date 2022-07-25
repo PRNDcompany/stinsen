@@ -10,8 +10,6 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     @ObservedObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
     
-    @State var isUIKitPresented: ViewControllerPresented?
-    
     var start: AnyView?
     
     var body: some View {
@@ -147,6 +145,7 @@ extension View {
             guard let destination = uiKitPresented.viewController, !destination.isPresented else {
                 return
             }
+            
 
             uiKitPresented.presentationType.presented(
                 parent: viewController,
@@ -165,6 +164,6 @@ extension View {
 extension UIViewController {
     // NOTE: - parent는 NavigationController, presentingViewController SheetModal 의 경우 상태 확인을 한다.
     var isPresented: Bool {
-        parent != nil || presentingViewController != nil
+        parent != nil || presentingViewController != nil || isBeingPresented
     }
 }
