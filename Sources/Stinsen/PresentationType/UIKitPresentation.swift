@@ -78,12 +78,13 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
-        let lifeCicleView = LifeCicleView()
-        lifeCicleView.onDeinit = {
+        let lifeCicleObject = LifeCicleObject()
+        lifeCicleObject.onDeinit = {
             onDissmissed()
             onAppeared()
         }
-        content.view.insertSubview(lifeCicleView, at: 0)
+
+        content.lifeCicleObject = lifeCicleObject
 
         presentHandler(
             parent,
@@ -100,21 +101,21 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 #endif
 
 
-private final class LifeCicleView: UIView {
-    var onDeinit: (() -> Void)?
+// MARK: - private
+private enum MapTables {
+  static let lifeCicle = WeakMapTable<UIViewController, Any>()
+}
 
+private final class LifeCicleObject {
+    var onDeinit: (() -> Void)?
     deinit {
         onDeinit?()
     }
+}
 
-    required init() {
-        super.init(frame: .zero)
-        isHidden = true
-        isUserInteractionEnabled = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+private extension UIViewController {
+    var lifeCicleObject: LifeCicleObject? {
+        get { MapTables.lifeCicle.value(forKey: self) as? LifeCicleObject }
+        set { MapTables.lifeCicle.setValue(newValue, forKey: self) }
     }
 }
