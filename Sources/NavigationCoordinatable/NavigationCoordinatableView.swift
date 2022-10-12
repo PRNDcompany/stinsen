@@ -142,11 +142,9 @@ extension View {
         background(UIKitIntrospectionViewController(selector: { $0.parent }) { viewController in
             guard case let .viewController(uiKitPresented) = presented else { return }
 
-            guard let destination = uiKitPresented.viewController, !destination.isPresented else {
+            guard let destination = uiKitPresented.viewController else {
                 return
             }
-            
-
             uiKitPresented.presentationType.presented(
                 parent: viewController,
                 content: destination,
@@ -157,13 +155,5 @@ extension View {
 #else
         self
 #endif
-    }
-}
-
-
-extension UIViewController {
-    // NOTE: - parent는 NavigationController, presentingViewController SheetModal 의 경우 상태 확인을 한다.
-    var isPresented: Bool {
-        parent != nil || presentingViewController != nil || isBeingPresented
     }
 }

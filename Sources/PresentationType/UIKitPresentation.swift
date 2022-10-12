@@ -78,6 +78,8 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
+        guard content.lifeCicleObject == nil else { return }
+
         let lifeCicleObject = LifeCicleObject()
         lifeCicleObject.onDeinit = {
             onDissmissed()
@@ -103,7 +105,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
 // MARK: - private
 private enum MapTables {
-  static let lifeCicle = WeakMapTable<UIViewController, Any>()
+    static let lifeCicle = WeakMapTable<UIViewController, Any>()
 }
 
 private final class LifeCicleObject {
