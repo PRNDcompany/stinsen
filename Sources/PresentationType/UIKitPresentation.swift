@@ -82,8 +82,8 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
         let lifeCicleObject = LifeCicleObject()
         lifeCicleObject.onDeinit = {
-            onDissmissed()
             onAppeared()
+            onDissmissed()
         }
 
         content.lifeCicleObject = lifeCicleObject
