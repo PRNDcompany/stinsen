@@ -9,9 +9,8 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     
     @Published var presented: Presented?
     
-    func setupPresented(coordinator: T) {
-        let value = self.navigationStack.value
-        
+    func setupPresented(coordinator: T, stackValue: [NavigationStackItem]) {
+        let value = stackValue
         let nextId = id + 1
         
         // Only apply updates on last screen in navigation stack
@@ -29,24 +28,23 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         self.id = id
         self.navigationStack = coordinator.stack
         
-        self.setupPresented(coordinator: coordinator)
+        setupPresented(coordinator: coordinator, stackValue: coordinator.stack.value)
         
-        navigationStack.$value.dropFirst().sink { [weak self, coordinator] _ in
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                
-                self.setupPresented(coordinator: coordinator)
+        navigationStack.$value.dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, coordinator] items in
+                self?.setupPresented(coordinator: coordinator, stackValue: items)
             }
-        }
-        .store(in: &cancellables)
+            .store(in: &cancellables)
         
-        navigationStack.poppedTo.filter { int -> Bool in int <= id }.sink { [weak self] int in
-            // remove any and all presented views if my id is less than or equal to the view being popped to!
-            DispatchQueue.main.async { [weak self] in
+        navigationStack.poppedTo.filter { int -> Bool in int <= id }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] int in
+                // remove any and all presented views if my id is less than or equal to the view being popped to!
                 self?.removePresented()
+
             }
-        }
-        .store(in: &cancellables)
+            .store(in: &cancellables)
     }
 
     func removePresented() {
