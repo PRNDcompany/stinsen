@@ -9,8 +9,8 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     
     @Published var presented: Presented?
     
-    func setupPresented(coordinator: T, stackValue: [NavigationStackItem]) {
-        let value = stackValue
+    func setupPresented(coordinator: T) {
+        let value = navigationStack.value
         let nextId = id + 1
         
         // Only apply updates on last screen in navigation stack
@@ -28,12 +28,12 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         self.id = id
         self.navigationStack = coordinator.stack
         
-        setupPresented(coordinator: coordinator, stackValue: coordinator.stack.value)
+        setupPresented(coordinator: coordinator)
         
-        navigationStack.$value.dropFirst()
+        navigationStack.valueSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self, coordinator] items in
-                self?.setupPresented(coordinator: coordinator, stackValue: items)
+                self?.setupPresented(coordinator: coordinator)
             }
             .store(in: &cancellables)
         
