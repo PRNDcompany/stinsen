@@ -32,3 +32,11 @@ public class TabChild: ObservableObject {
         self.activeTab = activeTab
     }
 }
+
+extension TabChild {
+    public var allItemViews: [AnyView]? {
+        guard allItems != nil else { return nil }
+        guard !allItems.isEmpty else { return nil }
+        return allItems.map { $0.presentable.view() }
+    }
+}
