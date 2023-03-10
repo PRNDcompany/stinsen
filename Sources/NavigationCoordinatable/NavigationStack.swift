@@ -24,17 +24,11 @@ public class NavigationStack<T: NavigationCoordinatable> {
     
     weak var parent: ChildDismissable?
     var poppedTo = PassthroughSubject<Int, Never>()
-    var valueSubject = PassthroughSubject<[NavigationStackItem], Never>()
     let initial: PartialKeyPath<T>
     let initialInput: Any?
     var root: NavigationRoot!
 
-    @Published var value: [NavigationStackItem] {
-        didSet {
-            // NOTE: - Added because Published is an event fired in willSet.
-            valueSubject.send(value)
-        }
-    }
+    @Published var value: [NavigationStackItem]
 
     public init(initial: PartialKeyPath<T>, _ initialInput: Any? = nil) {
         self.value = []
