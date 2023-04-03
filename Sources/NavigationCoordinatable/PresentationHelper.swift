@@ -4,36 +4,35 @@ import SwiftUI
 
 final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     private let id: Int
-    let navigationStack: NavigationStack<T>
     private var cancellables = Set<AnyCancellable>()
     
     @Published var presented: Presented?
     
-    func setupPresented(coordinator: T) {
-        let value = navigationStack.value
+    func setupPresented(coordinator: T, value: [NavigationStackItem]) {
         let nextId = id + 1
         
         // Only apply updates on last screen in navigation stack
         // This check is important to get the behaviour as using a bool-state in the view that you set
-        if value.count - 1 == nextId, presented == nil {
-            if let value = value[safe: nextId] {
-                let presentable = value.presentable
-                presented = value.presentationType
-                    .makePresented(presentable: presentable, nextId: nextId, coordinator: coordinator)
-            }
-        }
+        guard value.count - 1 == nextId, presented == nil, let value = value[safe: nextId] else { return }
+        
+        let presentable = value.presentable
+        presented = value.presentationType.makePresented(
+            presentable: presentable,
+            nextId: nextId,
+            coordinator: coordinator
+        )
     }
     
     init(id: Int, coordinator: T) {
         self.id = id
-        self.navigationStack = coordinator.stack
+        let navigationStack = coordinator.stack
         
-        setupPresented(coordinator: coordinator)
+        setupPresented(coordinator: coordinator, value: navigationStack.value)
         
-        navigationStack.valueSubject
+        navigationStack.$value
             .receive(on: DispatchQueue.main)
             .sink { [weak self, coordinator] items in
-                self?.setupPresented(coordinator: coordinator)
+                self?.setupPresented(coordinator: coordinator, value: items)
             }
             .store(in: &cancellables)
         
