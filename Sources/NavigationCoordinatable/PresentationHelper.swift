@@ -28,8 +28,9 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         let navigationStack = coordinator.stack
         
         setupPresented(coordinator: coordinator, value: navigationStack.value)
-        
-        navigationStack.$value
+
+        navigationStack
+            .changedValue
             .receive(on: DispatchQueue.main)
             .sink { [weak self, coordinator] items in
                 self?.setupPresented(coordinator: coordinator, value: items)
