@@ -1,6 +1,6 @@
 //
 //  UIKitPresentation.swift
-//  
+//
 //
 //  Created by wani on 2022/04/25.
 //
@@ -78,21 +78,18 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
-        guard content.lifeCicleObject == nil else { return }
 
-        let lifeCicleObject = LifeCicleObject()
-        lifeCicleObject.onDeinit = {
-            onAppeared()
-            onDissmissed()
-        }
+        guard content.onWillDismiss == nil && content.onDidDismiss == nil else { return }
+        
+        _ = UIViewController.swizzleDisappear
 
-        content.lifeCicleObject = lifeCicleObject
+        content.onWillDismiss = onAppeared
+        content.onDidDismiss = onDissmissed
 
         presentHandler(
             parent,
             content as! ViewController
         )
-
     }
 
     public func dismissed(viewController: UIViewController) {
@@ -101,23 +98,3 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
 }
 #endif
-
-
-// MARK: - private
-private enum MapTables {
-    static let lifeCicle = WeakMapTable<UIViewController, Any>()
-}
-
-private final class LifeCicleObject {
-    var onDeinit: (() -> Void)?
-    deinit {
-        onDeinit?()
-    }
-}
-
-private extension UIViewController {
-    var lifeCicleObject: LifeCicleObject? {
-        get { MapTables.lifeCicle.value(forKey: self) as? LifeCicleObject }
-        set { MapTables.lifeCicle.setValue(newValue, forKey: self) }
-    }
-}
