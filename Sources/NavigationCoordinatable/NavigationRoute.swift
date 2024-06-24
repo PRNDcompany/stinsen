@@ -102,3 +102,36 @@ extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatabl
         }))
     }
 }
+
+// AnyPresentationType
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output == AnyView , U == Presentation {
+    public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> (() -> ViewOutput)), _ presentation: AnyPresentationType) {
+        self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
+            return { _ in AnyView(wrappedValue(coordinator)()) }
+        }))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U == Presentation {
+    public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> ((Input) -> ViewOutput)), _ presentation: AnyPresentationType) {
+        self.init(standard: Transition(type: Presentation(type: presentation) , closure: { coordinator in
+            return { input in AnyView(wrappedValue(coordinator)(input)) }
+        }))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output: Coordinatable, U == Presentation {
+    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output)), _ presentation: AnyPresentationType) {
+        self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
+            return { _ in wrappedValue(coordinator)() }
+        }))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == Presentation {
+    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output)), _ presentation: AnyPresentationType) {
+        self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
+            return { input in wrappedValue(coordinator)(input) }
+        }))
+    }
+}
