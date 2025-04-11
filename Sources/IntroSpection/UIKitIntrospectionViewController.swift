@@ -35,16 +35,24 @@ struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewControll
         _ uiViewController: IntrospectionUIViewController,
         context: UIViewControllerRepresentableContext<UIKitIntrospectionViewController>
     ) {
-        DispatchQueue.main.async {
+        findTargetView(in: uiViewController, maxAttempts: 3)
+    }
+    
+    func findTargetView(
+        in viewController: IntrospectionUIViewController,
+        maxAttempts: Int
+    ) {
+        func attempt(_ remainingAttempts: Int) {
             DispatchQueue.main.async {
-                DispatchQueue.main.async {
-                    guard let targetView = self.selector(uiViewController) else {
-                        return
-                    }
+                if let targetView = self.selector(viewController) {
                     self.customize(targetView)
+                } else if remainingAttempts > 0 {
+                    attempt(remainingAttempts - 1)
                 }
             }
         }
+        
+        attempt(maxAttempts)
     }
 }
 #endif
