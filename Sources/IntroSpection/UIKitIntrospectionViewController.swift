@@ -11,10 +11,14 @@ import SwiftUI
 #if os(iOS)
 struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewController>: UIViewControllerRepresentable {
 
-    let selector: (IntrospectionUIViewController) -> TargetViewControllerType?
+    let selector: (UIViewController) -> TargetViewControllerType?
     let customize: (TargetViewControllerType) -> Void
 
-    public init(
+    final class TargetCache {
+        weak var target: TargetViewControllerType?
+    }
+
+    init(
         selector: @escaping (UIViewController) -> TargetViewControllerType?,
         customize: @escaping (TargetViewControllerType) -> Void
     ) {
@@ -22,25 +26,41 @@ struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewControll
         self.customize = customize
     }
 
-    public func makeUIViewController(
+    func makeUIViewController(
         context: UIViewControllerRepresentableContext<UIKitIntrospectionViewController>
     ) -> IntrospectionUIViewController {
         let viewController = IntrospectionUIViewController()
         viewController.accessibilityLabel = "IntrospectionUIViewController<\(TargetViewControllerType.self)>"
         viewController.view.accessibilityLabel = "IntrospectionUIView<\(TargetViewControllerType.self)>"
+
+        weak var coordinator = context.coordinator
+        viewController.handler = { _viewController in
+            self.findTargetView(_viewController, coordinator: coordinator)
+        }
         return viewController
     }
+    func findTargetView(_ uiViewController: IntrospectionUIViewController, coordinator: TargetCache?) {
+        guard let target = selector(uiViewController), coordinator?.target != target else { return }
+        coordinator?.target = target
+        customize(target)
+        uiViewController.handler = nil
+    }
 
-    public func updateUIViewController(
+    func updateUIViewController(
         _ uiViewController: IntrospectionUIViewController,
         context: UIViewControllerRepresentableContext<UIKitIntrospectionViewController>
     ) {
-        DispatchQueue.main.async {
-            guard let targetView = self.selector(uiViewController) else {
-                return
-            }
-            self.customize(targetView)
-        }
+        // Noting
     }
+
+    static func dismantleUIViewController(_ uiViewController: IntrospectionUIViewController, coordinator: Coordinator) {
+        uiViewController.handler = nil
+    }
+
+    
+    func makeCoordinator() -> TargetCache {
+        TargetCache()
+    }
+
 }
 #endif
