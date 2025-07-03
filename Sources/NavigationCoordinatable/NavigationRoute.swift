@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 protocol NavigationOutputable {
     func using(coordinator: Any, input: Any) -> ViewPresentable
 }
 
+@MainActor
 public protocol RouteType {
     
 }
@@ -29,6 +31,7 @@ public struct Transition<T: NavigationCoordinatable, U: RouteType, Input, Output
         }
     }
 }
+
 
 @propertyWrapper public class NavigationRoute<T: NavigationCoordinatable, U: RouteType, Input, Output: ViewPresentable> {
     

@@ -10,6 +10,7 @@ struct TabChildItem {
 
 /// Wrapper around childCoordinators
 /// Used so that you don't need to write @Published
+@MainActor
 public class TabChild: ObservableObject {
     weak var parent: ChildDismissable?
     public let startingItems: [AnyKeyPath]

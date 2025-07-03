@@ -18,7 +18,9 @@ public class NavigationRoot: ObservableObject {
     }
 }
 
+
 /// Represents a stack of routes
+@MainActor
 public class NavigationStack<T: NavigationCoordinatable> {
     var dismissalAction: [Int: () -> Void] = [:]
     
