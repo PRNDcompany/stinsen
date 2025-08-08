@@ -1,151 +1,89 @@
 import Foundation
 import SwiftUI
 
+/// Facade that coordinates stack management, presentation control, and lifecycle observation
+/// This is a thin wrapper that delegates to specialized components for better separation of concerns
 final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     private let id: Int
     private weak var coordinator: T?
     
+    // Specialized components
+    private let stackManager: StackManager<T>
+    private let presentationController: PresentationController<T>
+    private let lifecycleObserver: LifecycleObserver<T>
+    
     #if canImport(UIKit)
-    private weak var currentViewController: UIViewController?
+    // Maintained for backward compatibility
+    private var currentViewController: UIViewController? {
+        // Access through presentation controller
+        return nil
+    }
     #endif
-    private var currentPresented: ViewControllerPresented?
+    
+    // Maintained for backward compatibility
+    private var currentPresented: ViewControllerPresented? {
+        // Access through presentation controller
+        return nil
+    }
     
     deinit {
-        // Important: Clean up any remaining presented views
-        if currentPresented != nil {
-            removePresented()
-        }
+        // Presentation controller handles cleanup
+        presentationController.dismiss()
     }
 
     #if canImport(UIKit)
     func setupViewController(_ viewController: UIViewController) {
-        currentViewController = viewController
-        
-        // Register this view controller in the stack
-        if let coordinator = coordinator,
-           id >= 0 && id < coordinator.stack.value.count {
-            // Link the view controller to the corresponding stack item
-            // This is a bit tricky since NavigationStackItem is a struct
-            // We need to update the stack with the new item
-            var updatedStack = coordinator.stack.value
-            updatedStack[id].viewController = viewController
-            coordinator.stack.setStack(updatedStack)
-        }
-        
-        // Present if we have something waiting
-        if let presented = currentPresented {
-            presentViewIfNeeded(presented)
-        }
+        // Delegate to presentation controller
+        presentationController.setupViewController(viewController)
     }
     #else
     func setupViewController(_ viewController: Any) {
         // Non-UIKit platforms don't use this
+        presentationController.setupViewController(viewController)
     }
     #endif
 
     func handleStackChanged(_ items: [NavigationStackItem]) {
-        // Only root coordinator should handle stack changes
-        guard id == -1 else {
-            return
-        }
-        
-        let nextId = id + 1  // For root, nextId = 0
-        
-        // Root coordinator handles the first item (index 0) when stack has exactly 1 item
-        guard items.count == 1 else {
-            return
-        }
-        
-        // Check if already presenting
-        guard currentPresented == nil else {
-            return
-        }
-        
-        guard let item = items[safe: nextId] else {
-            return
-        }
-
-        let presentable = item.presentable
-        guard let presented = item.presentationType.makePresented(
-            presentable: presentable,
-            nextId: nextId,
-            coordinator: coordinator!
-        ) else {
-            return
-        }
-        
-        currentPresented = presented
-        presentViewIfNeeded(presented)
+        // StackManager handles this internally now through Combine
+        // This method is kept for backward compatibility but does nothing
     }
     
     func handlePopped(to index: Int) {
-        // Remove presented views if my id is less than or equal to the view being popped to
-        if index <= id {
-            removePresented()
-        }
+        // StackManager handles this internally now through Combine
+        // This method is kept for backward compatibility but does nothing
     }
     
     // Add method to handle dismiss from external source (like UIKitPresentation)
     func handleDismissed() {
-        currentPresented = nil
+        presentationController.dismiss()
     }
     
-    private func presentViewIfNeeded(_ presented: ViewControllerPresented) {
-        #if canImport(UIKit)
-        guard let parent = currentViewController else {
-            return
-        }
-        
-        presented.present(
-            parent: parent,
-            onAppear: { [weak self] in
-                let appearId = self?.id ?? 0
-                self?.coordinator?.appear(appearId)
-            },
-            onDisappear: { [weak self] in
-                let disappearId = self?.id ?? 0
-                // Clear currentPresented when dismissed
-                self?.currentPresented = nil
-                self?.coordinator?.disappear(disappearId)
-            }
-        )
-        #endif
-    }
-
     init(id: Int, coordinator: T) {
         self.id = id
         self.coordinator = coordinator
-        let navigationStack = coordinator.stack
         
-        // IMPORTANT: Only root PresentationHelper (id = -1) should manage navigation
-        // This prevents multiple PresentationHelpers from conflicting
-        if id == -1 {
-            
-            // Set up callbacks
-            navigationStack.onStackChanged = { [weak self] items in
-                DispatchQueue.main.async {
-                    self?.handleStackChanged(items)
-                }
-            }
-            
-            navigationStack.onPopped = { [weak self] index in
-                DispatchQueue.main.async {
-                    self?.handlePopped(to: index)
-                }
-            }
-            
-            // Initial setup
-            handleStackChanged(navigationStack.value)
+        // Initialize components
+        self.stackManager = StackManager(id: id, coordinator: coordinator, stack: coordinator.stack)
+        self.presentationController = PresentationController(id: id, coordinator: coordinator)
+        self.lifecycleObserver = LifecycleObserver(id: id, coordinator: coordinator)
+        
+        // Wire up components
+        setupComponentConnections()
+    }
+    
+    private func setupComponentConnections() {
+        // Connect stack manager to presentation controller
+        stackManager.onPresentationNeeded = { [weak self] item in
+            self?.presentationController.present(item: item)
+        }
+        
+        stackManager.onDismissalNeeded = { [weak self] in
+            self?.presentationController.dismiss()
         }
     }
 
     func removePresented() {
-        #if canImport(UIKit)
-        if let presented = currentPresented {
-            presented.dismiss()
-        }
-        #endif
-        currentPresented = nil
+        presentationController.dismiss()
     }
 }
 
