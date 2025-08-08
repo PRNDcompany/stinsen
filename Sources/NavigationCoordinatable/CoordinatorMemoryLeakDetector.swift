@@ -44,8 +44,6 @@ final class CoordinatorMemoryLeakDetector {
         Check for retain cycles or strong references.
         """
         
-        print("[MEMORY LEAK] \(message)")
-        
         #if canImport(UIKit)
         // Show alert on iOS
         DispatchQueue.main.async {
