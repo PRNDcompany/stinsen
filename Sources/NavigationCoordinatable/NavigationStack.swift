@@ -66,6 +66,23 @@ public class NavigationStack<T: NavigationCoordinatable> {
             return 
         }
         
+        // Track coordinators that are being removed for memory leak detection
+        #if DEBUG
+        let itemsBeingRemoved: [NavigationStackItem]
+        if index == -1 {
+            itemsBeingRemoved = _value
+        } else {
+            itemsBeingRemoved = Array(_value.suffix(from: index + 1))
+        }
+        
+        // Track each coordinator being removed
+        for item in itemsBeingRemoved {
+            if let coordinator = item.presentable as? Coordinatable {
+                coordinator.trackForMemoryLeak()
+            }
+        }
+        #endif
+        
         if index == -1 {
             _value = []
         } else {

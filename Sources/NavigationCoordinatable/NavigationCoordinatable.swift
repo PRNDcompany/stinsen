@@ -318,6 +318,11 @@ public extension NavigationCoordinatable {
     
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)? = nil) {
         
+        // Track for memory leak in debug mode
+        #if DEBUG
+        coordinator.trackForMemoryLeak()
+        #endif
+        
         // Check if already dismissing to prevent duplicate calls
         if coordinator is NavigationCoordinatable {
             if let navCoordinator = coordinator as? any NavigationCoordinatable,
