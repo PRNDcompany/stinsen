@@ -6,7 +6,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     private weak var coordinator: T?
     
     private weak var currentViewController: UIViewController?
-    private var currentPresented: Presented?
+    private var currentPresented: ViewControllerPresented?
     
     deinit {
         print("[stinsen] PresentationHelper.deinit: id=\(id) being deallocated")
@@ -78,11 +78,14 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
 
         print("[stinsen] PresentationHelper.handleStackChanged: Creating presented for item at index \(nextId)")
         let presentable = item.presentable
-        let presented = item.presentationType.makePresented(
+        guard let presented = item.presentationType.makePresented(
             presentable: presentable,
             nextId: nextId,
             coordinator: coordinator!
-        )
+        ) else {
+            print("[stinsen] PresentationHelper.handleStackChanged: ⚠️ Failed to create presented")
+            return
+        }
         
         currentPresented = presented
         print("[stinsen] PresentationHelper.handleStackChanged: ✅ Calling presentViewIfNeeded")
@@ -106,7 +109,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         currentPresented = nil
     }
     
-    private func presentViewIfNeeded(_ presented: Presented) {
+    private func presentViewIfNeeded(_ presented: ViewControllerPresented) {
         guard let parent = currentViewController else {
             print("[stinsen] PresentationHelper.presentViewIfNeeded: ⚠️ No currentViewController, returning")
             return
@@ -166,7 +169,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
 
     func removePresented() {
         print("[stinsen] PresentationHelper.removePresented: Called")
-        if case let .viewController(presented) = currentPresented {
+        if let presented = currentPresented {
             print("[stinsen] PresentationHelper.removePresented: Dismissing viewController")
             presented.dismiss()
         } else {
@@ -178,15 +181,14 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
 }
 
 
-private extension Presented {
+private extension ViewControllerPresented {
     func present(parent: UIViewController, onAppear: @escaping () -> Void, onDisappear: @escaping () -> Void) {
-        guard case let .viewController(uiKitPresented) = self,
-              let destination = uiKitPresented.viewController else { return }
-        uiKitPresented.presentationType.presented(
+        guard let destination = self.viewController else { return }
+        self.presentationType.presented(
             parent: parent,
             content: destination,
             onAppeared: onAppear,
-            onDissmissed: onDisappear
+            onDismissed: onDisappear
         )
     }
 }

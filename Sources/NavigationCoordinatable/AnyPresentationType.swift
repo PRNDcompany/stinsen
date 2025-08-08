@@ -11,14 +11,14 @@ import SwiftUI
 
 public struct AnyPresentationType: PresentationType {
 
-    var parsentationType: PresentationType
+    var presentationType: PresentationType
 
-    public init(_ parsentationType: PresentationType) {
-        self.parsentationType = parsentationType
+    public init(_ presentationType: PresentationType) {
+        self.presentationType = presentationType
     }
 
-    public func makePresented<T>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented where T : NavigationCoordinatable {
-        parsentationType.makePresented(presentable: presentable, nextId: nextId, coordinator: coordinator)
+    public func makePresented<T>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> ViewControllerPresented? where T : NavigationCoordinatable {
+        presentationType.makePresented(presentable: presentable, nextId: nextId, coordinator: coordinator)
     }
 }
 

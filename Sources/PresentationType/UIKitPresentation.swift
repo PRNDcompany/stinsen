@@ -49,21 +49,17 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         }
     }
 
-    public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> Presented {
+    public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> ViewControllerPresented? {
         if presentable is AnyView {
             let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
-            return .viewController(
-                ViewControllerPresented(
-                    viewController: makeViewController(content: view),
-                    presentationType: self
-                )
+            return ViewControllerPresented(
+                viewController: makeViewController(content: view),
+                presentationType: self
             )
         } else {
-            return .viewController(
-                ViewControllerPresented(
-                    viewController: makeViewController(content: presentable.view()),
-                    presentationType: self
-                )
+            return ViewControllerPresented(
+                viewController: makeViewController(content: presentable.view()),
+                presentationType: self
             )
         }
     }
@@ -77,7 +73,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         return viewController
     }
 
-    public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
+    public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {
         
         // Handle re-entry: clear existing lifeCicleObject if present
         if content.lifeCicleObject != nil {
@@ -88,7 +84,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         
         // Only call onDissmissed when the view controller is actually being deallocated
         lifeCicleObject.onDeinit = {
-            onDissmissed()
+            onDismissed()
         }
 
         content.lifeCicleObject = lifeCicleObject
