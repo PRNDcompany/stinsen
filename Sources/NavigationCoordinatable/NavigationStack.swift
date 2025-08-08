@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // Wrapper to break retain cycles - holds weak reference to coordinators
 class WeakViewPresentable {
@@ -63,20 +64,54 @@ public class NavigationStack<T: NavigationCoordinatable> {
     
     weak var parent: ChildDismissable?
     
-    // Direct callback instead of Combine
-    var onStackChanged: (([NavigationStackItem]) -> Void)?
-    var onPopped: ((Int) -> Void)?
+    // Combine-based state management
+    @Published private var _value: [NavigationStackItem] = []
+    private let poppedSubject = PassthroughSubject<Int, Never>()
+    private var cancellables = Set<AnyCancellable>()
+    
+    // Backward compatibility: maintain callback API
+    var onStackChanged: (([NavigationStackItem]) -> Void)? {
+        didSet {
+            // Subscribe to changes when callback is set
+            if let callback = onStackChanged {
+                $_value
+                    .sink { items in
+                        callback(items)
+                    }
+                    .store(in: &cancellables)
+            }
+        }
+    }
+    
+    var onPopped: ((Int) -> Void)? {
+        didSet {
+            // Subscribe to pop events when callback is set
+            if let callback = onPopped {
+                poppedSubject
+                    .sink { index in
+                        callback(index)
+                    }
+                    .store(in: &cancellables)
+            }
+        }
+    }
 
     let initial: PartialKeyPath<T>
     let initialInput: Any?
     var root: NavigationRoot!
-
-    // Private storage for stack items
-    private var _value: [NavigationStackItem] = []
     
-    // Read-only public access
+    // Public access to stack items (now reactive)
     var value: [NavigationStackItem] {
         return _value
+    }
+    
+    // Combine publishers for reactive programming
+    var valuePublisher: AnyPublisher<[NavigationStackItem], Never> {
+        $_value.eraseToAnyPublisher()
+    }
+    
+    var poppedPublisher: AnyPublisher<Int, Never> {
+        poppedSubject.eraseToAnyPublisher()
     }
 
     public init(initial: PartialKeyPath<T>, _ initialInput: Any? = nil) {
@@ -94,8 +129,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
     /// Clean up references to break retain cycles
     func cleanup() {
         _value.removeAll()
-        onStackChanged = nil
-        onPopped = nil
+        cancellables.removeAll()
         dismissalAction.removeAll()
         // Note: We don't set root to nil here because NavigationCoordinatableView might still need it
     }
@@ -111,7 +145,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
         }
         
         _value.append(item)
-        onStackChanged?(_value)
+        // Published property will automatically notify subscribers
     }
     
     /// Pop to a specific index
@@ -142,8 +176,8 @@ public class NavigationStack<T: NavigationCoordinatable> {
         } else {
             _value = Array(_value.prefix(index + 1))
         }
-        onPopped?(index)
-        onStackChanged?(_value)
+        poppedSubject.send(index)
+        // Published property will automatically notify subscribers
     }
     
     #if canImport(UIKit)
@@ -163,7 +197,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
     /// Replace the entire stack
     func setStack(_ newValue: [NavigationStackItem]) {
         _value = newValue
-        onStackChanged?(_value)
+        // Published property will automatically notify subscribers
     }
 }
 
