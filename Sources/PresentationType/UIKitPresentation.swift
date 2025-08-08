@@ -111,8 +111,6 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
 }
-#endif
-
 
 // MARK: - private
 private enum MapTables {
@@ -132,3 +130,4 @@ private extension UIViewController {
         set { MapTables.lifeCicle.setValue(newValue, forKey: self) }
     }
 }
+#endif

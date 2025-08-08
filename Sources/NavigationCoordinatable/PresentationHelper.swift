@@ -5,7 +5,9 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     private let id: Int
     private weak var coordinator: T?
     
+    #if canImport(UIKit)
     private weak var currentViewController: UIViewController?
+    #endif
     private var currentPresented: ViewControllerPresented?
     
     deinit {
@@ -17,11 +19,11 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         }
     }
 
+    #if canImport(UIKit)
     func setupViewController(_ viewController: UIViewController) {
         currentViewController = viewController
         
         // Register this view controller in the stack
-        #if canImport(UIKit)
         if let coordinator = coordinator,
            id >= 0 && id < coordinator.stack.value.count {
             // Link the view controller to the corresponding stack item
@@ -31,13 +33,17 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
             updatedStack[id].viewController = viewController
             coordinator.stack.setStack(updatedStack)
         }
-        #endif
         
         // Present if we have something waiting
         if let presented = currentPresented {
             presentViewIfNeeded(presented)
         }
     }
+    #else
+    func setupViewController(_ viewController: Any) {
+        // Non-UIKit platforms don't use this
+    }
+    #endif
 
     func handleStackChanged(_ items: [NavigationStackItem]) {
         // Only root coordinator should handle stack changes
@@ -110,6 +116,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     }
     
     private func presentViewIfNeeded(_ presented: ViewControllerPresented) {
+        #if canImport(UIKit)
         guard let parent = currentViewController else {
             print("[stinsen] PresentationHelper.presentViewIfNeeded: ⚠️ No currentViewController, returning")
             return
@@ -133,6 +140,7 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
             }
         )
         print("[stinsen] PresentationHelper.presentViewIfNeeded: ✅ Present called")
+        #endif
     }
 
     init(id: Int, coordinator: T) {
@@ -169,18 +177,21 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
 
     func removePresented() {
         print("[stinsen] PresentationHelper.removePresented: Called")
+        #if canImport(UIKit)
         if let presented = currentPresented {
             print("[stinsen] PresentationHelper.removePresented: Dismissing viewController")
             presented.dismiss()
         } else {
             print("[stinsen] PresentationHelper.removePresented: No viewController to dismiss")
         }
+        #endif
         currentPresented = nil
         print("[stinsen] PresentationHelper.removePresented: ✅ currentPresented cleared")
     }
 }
 
 
+#if canImport(UIKit)
 private extension ViewControllerPresented {
     func present(parent: UIViewController, onAppear: @escaping () -> Void, onDisappear: @escaping () -> Void) {
         guard let destination = self.viewController else { return }
@@ -192,3 +203,4 @@ private extension ViewControllerPresented {
         )
     }
 }
+#endif
