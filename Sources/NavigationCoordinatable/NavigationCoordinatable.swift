@@ -1,6 +1,9 @@
 import Foundation
 import SwiftUI
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public protocol NavigationCoordinatable: Coordinatable {
     typealias Route = NavigationRoute
@@ -348,17 +351,7 @@ public extension NavigationCoordinatable {
             self.stack.dismissalAction[int] = action
         }
 
-        guard int + 1 <= self.stack.value.count else {
-            return
-        }
-        
-        if int == -1 {
-            self.stack.value = []
-            self.stack.poppedTo.send(-1)
-        } else if int >= 0 {
-            self.stack.value = Array(self.stack.value.prefix(int + 1))
-            self.stack.poppedTo.send(int)
-        }
+        stack.popToIndex(int)
     }
     
     func view() -> AnyView {
@@ -385,14 +378,13 @@ public extension NavigationCoordinatable {
     ) -> Output {
         let transition = self[keyPath: route]
         let output = transition.closure(self)(input)
-        stack.value.append(
-            NavigationStackItem(
-                presentationType: transition.type.type,
-                presentable: output,
-                keyPath: route.hashValue,
-                input: input
-            )
+        let item = NavigationStackItem(
+            presentationType: transition.type.type,
+            presentable: output,
+            keyPath: route.hashValue,
+            input: input
         )
+        stack.push(item)
         output.parent = self
         return output
     }
@@ -410,14 +402,13 @@ public extension NavigationCoordinatable {
     ) -> Output {
         let transition = self[keyPath: route]
         let output = transition.closure(self)(())
-        stack.value.append(
-            NavigationStackItem(
-                presentationType: transition.type.type,
-                presentable: output,
-                keyPath: route.hashValue,
-                input: nil
-            )
+        let item = NavigationStackItem(
+            presentationType: transition.type.type,
+            presentable: output,
+            keyPath: route.hashValue,
+            input: nil
         )
+        stack.push(item)
         output.parent = self
         return output
     }
@@ -437,14 +428,13 @@ public extension NavigationCoordinatable {
     ) -> Self {
         let transition = self[keyPath: route]
         let output = transition.closure(self)(input)
-        self.stack.value.append(
-            NavigationStackItem(
-                presentationType: transition.type.type,
-                presentable: output,
-                keyPath: route.hashValue,
-                input: input
-            )
+        let item = NavigationStackItem(
+            presentationType: transition.type.type,
+            presentable: output,
+            keyPath: route.hashValue,
+            input: input
         )
+        stack.push(item)
         return self
     }
     
@@ -461,14 +451,13 @@ public extension NavigationCoordinatable {
     ) -> Self {
         let transition = self[keyPath: route]
         let output = transition.closure(self)(())
-        self.stack.value.append(
-            NavigationStackItem(
-                presentationType: transition.type.type,
-                presentable: output,
-                keyPath: route.hashValue,
-                input: nil
-            )
+        let item = NavigationStackItem(
+            presentationType: transition.type.type,
+            presentable: output,
+            keyPath: route.hashValue,
+            input: nil
         )
+        stack.push(item)
         return self
     }
 

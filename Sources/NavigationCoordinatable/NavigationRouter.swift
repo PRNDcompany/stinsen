@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public final class NavigationRouter<T>: Routable {
     public let id: Int
@@ -8,6 +11,11 @@ public final class NavigationRouter<T>: Routable {
     }
     
     private var _coordinator: WeakRef<AnyObject>
+    
+    #if canImport(UIKit)
+    // Weak reference to the view controller associated with this router
+    weak var viewController: UIViewController?
+    #endif
     
     public init(id: Int, coordinator: T) {
         self.id = id
@@ -24,6 +32,20 @@ public extension NavigationRouter where T: NavigationCoordinatable {
     }
     
     func pop(_ action: (() -> ())? = nil) {
+        #if canImport(UIKit)
+        // Try UIKit-based navigation first
+        if let currentVC = viewController {
+            let stack = coordinator.stack
+            if let currentIndex = stack.indexOfViewController(currentVC),
+               currentIndex > 0 {
+                // Pop to the previous view controller
+                coordinator.popTo(currentIndex - 1, action)
+                return
+            }
+        }
+        #endif
+        
+        // Fallback to ID-based navigation
         coordinator.popTo(self.id - 1, action)
     }
     
