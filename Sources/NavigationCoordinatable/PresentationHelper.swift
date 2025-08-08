@@ -7,6 +7,15 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     
     private weak var currentViewController: UIViewController?
     private var currentPresented: Presented?
+    
+    deinit {
+        print("[stinsen] PresentationHelper.deinit: id=\(id) being deallocated")
+        // Important: Clean up any remaining presented views
+        if currentPresented != nil {
+            print("[stinsen] PresentationHelper.deinit: Cleaning up currentPresented")
+            removePresented()
+        }
+    }
 
     func setupViewController(_ viewController: UIViewController) {
         currentViewController = viewController
@@ -31,13 +40,43 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     }
 
     func handleStackChanged(_ items: [NavigationStackItem]) {
-        let nextId = id + 1
-        // Only apply updates on last screen in navigation stack
-        // This check is important to get the behaviour as using a bool-state in the view that you set
-        guard items.count - 1 == nextId,
-              currentPresented == nil,
-              let item = items[safe: nextId] else { return }
+        // Only root coordinator should handle stack changes
+        guard id == -1 else {
+            print("[stinsen] PresentationHelper.handleStackChanged: Non-root (id=\(id)) - ignoring stack changes")
+            return
+        }
+        
+        let nextId = id + 1  // For root, nextId = 0
+        print("[stinsen] PresentationHelper.handleStackChanged: Root coordinator handling, items.count=\(items.count)")
+        print("[stinsen] PresentationHelper.handleStackChanged: currentPresented=\(currentPresented != nil ? "exists" : "nil")")
+        
+        // Debug: Print all items in stack
+        for (index, item) in items.enumerated() {
+            print("[stinsen] PresentationHelper.handleStackChanged:   Stack[\(index)]: keyPath=\(item.keyPath)")
+        }
+        
+        // Root coordinator handles the first item (index 0) when stack has exactly 1 item
+        guard items.count == 1 else {
+            if items.count > 1 {
+                print("[stinsen] PresentationHelper.handleStackChanged: ⚠️ Multiple items in stack (\(items.count)), only handling first push")
+            } else {
+                print("[stinsen] PresentationHelper.handleStackChanged: ⚠️ Empty stack, nothing to present")
+            }
+            return
+        }
+        
+        // Check if already presenting
+        guard currentPresented == nil else {
+            print("[stinsen] PresentationHelper.handleStackChanged: ⚠️ Already presenting, ignoring")
+            return
+        }
+        
+        guard let item = items[safe: nextId] else {
+            print("[stinsen] PresentationHelper.handleStackChanged: ⚠️ No item at index \(nextId), returning")
+            return
+        }
 
+        print("[stinsen] PresentationHelper.handleStackChanged: Creating presented for item at index \(nextId)")
         let presentable = item.presentable
         let presented = item.presentationType.makePresented(
             presentable: presentable,
@@ -46,57 +85,95 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         )
         
         currentPresented = presented
+        print("[stinsen] PresentationHelper.handleStackChanged: ✅ Calling presentViewIfNeeded")
         presentViewIfNeeded(presented)
     }
     
     func handlePopped(to index: Int) {
+        print("[stinsen] PresentationHelper.handlePopped: to index=\(index), my id=\(id)")
         // Remove presented views if my id is less than or equal to the view being popped to
         if index <= id {
+            print("[stinsen] PresentationHelper.handlePopped: Removing presented (index \(index) <= id \(id))")
             removePresented()
+        } else {
+            print("[stinsen] PresentationHelper.handlePopped: Not removing (index \(index) > id \(id))")
         }
     }
     
+    // Add method to handle dismiss from external source (like UIKitPresentation)
+    func handleDismissed() {
+        print("[stinsen] PresentationHelper.handleDismissed: Clearing currentPresented")
+        currentPresented = nil
+    }
+    
     private func presentViewIfNeeded(_ presented: Presented) {
-        guard let parent = currentViewController else { return }
+        guard let parent = currentViewController else {
+            print("[stinsen] PresentationHelper.presentViewIfNeeded: ⚠️ No currentViewController, returning")
+            return
+        }
         
+        print("[stinsen] PresentationHelper.presentViewIfNeeded: Presenting with parent=\(parent)")
         presented.present(
             parent: parent,
             onAppear: { [weak self] in
-                self?.coordinator?.appear(self?.id ?? 0)
+                let appearId = self?.id ?? 0
+                print("[stinsen] PresentationHelper.presentViewIfNeeded.onAppear: id=\(appearId)")
+                self?.coordinator?.appear(appearId)
             },
             onDisappear: { [weak self] in
-                self?.coordinator?.disappear(self?.id ?? 0)
+                let disappearId = self?.id ?? 0
+                print("[stinsen] PresentationHelper.presentViewIfNeeded.onDisappear: id=\(disappearId)")
+                // Clear currentPresented when dismissed
+                self?.currentPresented = nil
+                print("[stinsen] PresentationHelper.presentViewIfNeeded.onDisappear: currentPresented cleared")
+                self?.coordinator?.disappear(disappearId)
             }
         )
+        print("[stinsen] PresentationHelper.presentViewIfNeeded: ✅ Present called")
     }
 
     init(id: Int, coordinator: T) {
         self.id = id
         self.coordinator = coordinator
         let navigationStack = coordinator.stack
+        
+        print("[stinsen] PresentationHelper.init: Created with id=\(id), coordinator=\(type(of: coordinator))")
 
-        // Set up callbacks
-        navigationStack.onStackChanged = { [weak self] items in
-            DispatchQueue.main.async {
-                self?.handleStackChanged(items)
+        // IMPORTANT: Only root PresentationHelper (id = -1) should manage navigation
+        // This prevents multiple PresentationHelpers from conflicting
+        if id == -1 {
+            print("[stinsen] PresentationHelper.init: Root coordinator - setting up callbacks")
+            
+            // Set up callbacks
+            navigationStack.onStackChanged = { [weak self] items in
+                DispatchQueue.main.async {
+                    self?.handleStackChanged(items)
+                }
             }
-        }
-        
-        navigationStack.onPopped = { [weak self] index in
-            DispatchQueue.main.async {
-                self?.handlePopped(to: index)
+            
+            navigationStack.onPopped = { [weak self] index in
+                DispatchQueue.main.async {
+                    self?.handlePopped(to: index)
+                }
             }
+            
+            // Initial setup
+            handleStackChanged(navigationStack.value)
+        } else {
+            print("[stinsen] PresentationHelper.init: Non-root (id=\(id)) - skipping callbacks to prevent conflicts")
         }
-        
-        // Initial setup
-        handleStackChanged(navigationStack.value)
     }
 
     func removePresented() {
+        print("[stinsen] PresentationHelper.removePresented: Called")
         if case let .viewController(presented) = currentPresented {
+            print("[stinsen] PresentationHelper.removePresented: Dismissing viewController")
             presented.dismiss()
+        } else {
+            print("[stinsen] PresentationHelper.removePresented: No viewController to dismiss")
         }
         currentPresented = nil
+        print("[stinsen] PresentationHelper.removePresented: ✅ currentPresented cleared")
     }
 }
 

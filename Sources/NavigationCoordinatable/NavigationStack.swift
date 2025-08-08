@@ -50,20 +50,27 @@ public class NavigationStack<T: NavigationCoordinatable> {
     
     /// Push a new item to the stack
     func push(_ item: NavigationStackItem) {
+        
+        // Check for duplicate push (same keyPath being pushed consecutively)
+        if let lastItem = _value.last, lastItem.keyPath == item.keyPath {
+            return
+        }
+        
         _value.append(item)
         onStackChanged?(_value)
     }
     
     /// Pop to a specific index
     func popToIndex(_ index: Int) {
-        guard index >= -1 && index < _value.count else { return }
+        guard index >= -1 && index < _value.count else { 
+            return 
+        }
         
         if index == -1 {
             _value = []
         } else {
             _value = Array(_value.prefix(index + 1))
         }
-        
         onPopped?(index)
         onStackChanged?(_value)
     }

@@ -296,24 +296,82 @@ public extension NavigationCoordinatable {
             stack.parent = newValue
         }
     }
+    
+    // Track if dismiss is in progress to prevent duplicate calls
+    // Using a global variable since we can't have static properties in protocol extensions
+    private var isDismissing: Bool {
+        get {
+            return DismissingCoordinators.shared.contains(self.id)
+        }
+        set {
+            if newValue {
+                DismissingCoordinators.shared.insert(self.id)
+            } else {
+                DismissingCoordinators.shared.remove(self.id)
+            }
+        }
+    }
 
     func customize(_ view: AnyView) -> some View {
         return view
     }
     
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)? = nil) {
-        guard let value = stack.value.firstIndex(where: { item in
-            guard let presentable = item.presentable as? StringIdentifiable else {
-                return false
+        
+        // Check if already dismissing to prevent duplicate calls
+        if coordinator is NavigationCoordinatable {
+            if let navCoordinator = coordinator as? any NavigationCoordinatable,
+               navCoordinator.isDismissing {
+                return
             }
-            
-            return presentable.id == coordinator.id
-        }) else {
-            assertionFailure("Can not dismiss child when coordinator is top of the stack.")
+            (coordinator as? any NavigationCoordinatable)?.isDismissing = true
+        }
+        
+        // First check if the stack is empty - nothing to dismiss
+        guard !stack.value.isEmpty else {
+            action?() // Still call the action if provided
+            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
             return
         }
         
-        self.popTo(value - 1, action)
+        // Try to find the coordinator in the stack
+        guard let value = stack.value.firstIndex(where: { item in
+            // Check if the presentable is a Coordinatable (which always has an id)
+            guard let presentable = item.presentable as? any Coordinatable else {
+                return false
+            }
+            
+            let matches = presentable.id == coordinator.id
+            if matches {
+            }
+            return matches
+        }) else {
+            // Coordinator not found - check if it's the last item (common case)
+            if stack.value.count > 0 {
+                
+                // If we have items in stack but can't find the coordinator,
+                // it might be a re-entry scenario where IDs changed
+                // In this case, just pop the last item
+                if stack.value.count > 0 {
+                    // Create wrapper action to clear flag after completion
+                    let wrappedAction = {
+                        action?()
+                        (coordinator as? any NavigationCoordinatable)?.isDismissing = false
+                    }
+                    self.popTo(stack.value.count - 2, wrappedAction)
+                    return
+                }
+            }
+            action?() // Still call the action if provided
+            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
+            return
+        }
+        // Create wrapper action to clear flag after completion
+        let wrappedAction = {
+            action?()
+            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
+        }
+        self.popTo(value - 1, wrappedAction)
     }
     
     func dismissCoordinator(_ action: (() -> ())? = nil) {
@@ -333,13 +391,37 @@ public extension NavigationCoordinatable {
         self.stack.root = NavigationRoot(item: item)
     }
     
-    internal func appear(_ int: Int) {        
-        self.popTo(int, nil)
+    internal func appear(_ int: Int) {
+        // NOTE: Original implementation called popTo(int, nil) which is incorrect.
+        // "appear" should not trigger navigation changes, it should only track visibility.
+        // Navigation changes should be explicit through push/pop/dismiss methods.
+        
+        // For now, we'll just track the appearance without causing navigation side effects.
+        // If you need to sync navigation state, do it explicitly, not as a side effect of appearing.
+        
+        // Could potentially track visible view controllers here if needed:
+        // self.visibleIndex = int
     }
 
     internal func disappear(_ id: Int) {
-        stack.dismissalAction[id]?()
+        
+        // Execute dismissal action if exists
+        if let action = stack.dismissalAction[id] {
+            action()
+        } else {
+        }
         stack.dismissalAction[id] = nil
+        
+        // IMPORTANT: When a view disappears (is dismissed), we should also clean up the stack
+        // Special handling for root coordinator (id = -1)
+        if id == -1 && stack.value.count > 0 {
+            // Remove the last item from the stack (the one that was just dismissed)
+            stack.popToIndex(stack.value.count - 2)
+        } else if id >= 0 && id < stack.value.count {
+            // Pop to the previous item (id - 1)
+            stack.popToIndex(id - 1)
+        } else {
+        }
     }
 
     func popLast(_ action: (() -> ())? = nil) {
@@ -475,7 +557,7 @@ public extension NavigationCoordinatable {
             }
             
             guard let compareTo = item.element.input else {
-                fatalError()
+                assertionFailure()
             }
             
             return input.comparator(compareTo as! Input, input.value)
@@ -502,7 +584,7 @@ public extension NavigationCoordinatable {
             }
             
             guard let compareTo = item.element.input else {
-                fatalError()
+                assertionFailure()
             }
             
             return input.comparator(compareTo as! Input, input.value)
@@ -698,7 +780,7 @@ public extension NavigationCoordinatable {
         }
 
         guard let compareTo = stack.root.item.input else {
-            fatalError()
+            assertionFailure()
         }
 
         return inputItem.comparator(compareTo as! Input, inputItem.input)
@@ -717,7 +799,7 @@ public extension NavigationCoordinatable {
         }
 
         guard let compareTo = stack.root.item.input else {
-            fatalError()
+            assertionFailure()
         }
 
         return inputItem.comparator(compareTo as! Input, inputItem.input)
@@ -809,5 +891,26 @@ public extension NavigationCoordinatable {
         comparator: @escaping (Input, Input) -> Bool
     ) -> Output? {
         return self._hasRoot(route, inputItem: (input: input, comparator: comparator))
+    }
+}
+
+// Helper class to track dismissing coordinators
+// We need this because we can't have static stored properties in protocol extensions
+private class DismissingCoordinators {
+    static let shared = DismissingCoordinators()
+    private var coordinators = Set<String>()
+    
+    private init() {}
+    
+    func contains(_ id: String) -> Bool {
+        return coordinators.contains(id)
+    }
+    
+    func insert(_ id: String) {
+        coordinators.insert(id)
+    }
+    
+    func remove(_ id: String) {
+        coordinators.remove(id)
     }
 }

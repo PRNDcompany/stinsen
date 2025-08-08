@@ -78,24 +78,39 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDissmissed: @escaping () -> Void) {
-        guard content.lifeCicleObject == nil else { return }
+        
+        // Handle re-entry: clear existing lifeCicleObject if present
+        if content.lifeCicleObject != nil {
+            content.lifeCicleObject = nil
+        }
 
         let lifeCicleObject = LifeCicleObject()
+        
+        // Only call onDissmissed when the view controller is actually being deallocated
         lifeCicleObject.onDeinit = {
-            onAppeared()
             onDissmissed()
         }
 
         content.lifeCicleObject = lifeCicleObject
-
         presentHandler(
             parent,
             content as! ViewController
         )
-
+        
+        // Call onAppeared after presentation completes
+        // Note: The appear() function has been fixed to not trigger unwanted popTo() calls
+        DispatchQueue.main.async {
+            onAppeared()
+        }
     }
 
     public func dismissed(viewController: UIViewController) {
+        // Clear lifeCicleObject to ensure clean state for re-entry
+        viewController.lifeCicleObject = nil
+        
+        // NOTE: We need to ensure the stack is properly cleaned up when dismissing
+        // The dismissHandler should handle the UI dismissal, but the stack cleanup
+        // should be handled by the coordinator through the onDissmissed callback
         dismissHandler(viewController)
     }
 
