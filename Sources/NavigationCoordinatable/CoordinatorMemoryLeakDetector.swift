@@ -68,10 +68,10 @@ final class CoordinatorMemoryLeakDetector {
                 topController.present(alert, animated: true)
             }
         }
-        #endif
         
-        // Also trigger assertion for debugging
+        // Also trigger assertion for debugging on iOS
         assertionFailure("Memory leak detected: \(coordinatorType) with id \(coordinatorId) was not deallocated after being popped")
+        #endif
         #endif
     }
 }
