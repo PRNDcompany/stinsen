@@ -1,10 +1,50 @@
 import Foundation
 import SwiftUI
 
+// Wrapper to break retain cycles - holds weak reference to coordinators
+class WeakViewPresentable {
+    private weak var weakCoordinator: (any Coordinatable)?
+    private let strongView: AnyView?
+    
+    init(_ presentable: ViewPresentable) {
+        if let coordinator = presentable as? any Coordinatable {
+            self.weakCoordinator = coordinator
+            self.strongView = nil
+        } else if let view = presentable as? AnyView {
+            self.weakCoordinator = nil
+            self.strongView = view
+        } else {
+            // Should not happen, but handle gracefully
+            self.weakCoordinator = nil
+            self.strongView = nil
+        }
+    }
+    
+    var presentable: ViewPresentable? {
+        if let coordinator = weakCoordinator {
+            return coordinator
+        } else if let view = strongView {
+            return view
+        }
+        return nil
+    }
+}
+
 struct NavigationRootItem {
     let keyPath: Int
     let input: Any?
-    let child: ViewPresentable
+    private let childWrapper: WeakViewPresentable
+    
+    var child: ViewPresentable {
+        // Return the presentable or a placeholder if it was deallocated
+        return childWrapper.presentable ?? AnyView(EmptyView())
+    }
+    
+    init(keyPath: Int, input: Any?, child: ViewPresentable) {
+        self.keyPath = keyPath
+        self.input = input
+        self.childWrapper = WeakViewPresentable(child)
+    }
 }
 
 /// Wrapper around childCoordinators
@@ -46,6 +86,20 @@ public class NavigationStack<T: NavigationCoordinatable> {
         self.root = nil
     }
     
+    deinit {
+        // Clean up to break potential retain cycles
+        cleanup()
+    }
+    
+    /// Clean up references to break retain cycles
+    func cleanup() {
+        _value.removeAll()
+        onStackChanged = nil
+        onPopped = nil
+        dismissalAction.removeAll()
+        // Note: We don't set root to nil here because NavigationCoordinatableView might still need it
+    }
+    
     // MARK: - Setter Methods
     
     /// Push a new item to the stack
@@ -77,7 +131,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
         
         // Track each coordinator being removed
         for item in itemsBeingRemoved {
-            if let coordinator = item.presentable as? Coordinatable {
+            if let coordinator = item.presentable as? any Coordinatable {
                 coordinator.trackForMemoryLeak()
             }
         }

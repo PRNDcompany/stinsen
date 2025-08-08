@@ -1,12 +1,14 @@
 import Foundation
 import SwiftUI
 
+@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 protocol Outputable {
     func using(coordinator: Any) -> ViewPresentable
     func tabItem(active: Bool, coordinator: Any) -> AnyView
     func onTapped(_ isRepeat: Bool, coordinator: Any)
 }
 
+@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 public class Content<T: TabCoordinatable, Output: ViewPresentable>: Outputable {
     
     func tabItem(active: Bool, coordinator: Any) -> AnyView {
@@ -46,6 +48,7 @@ public class Content<T: TabCoordinatable, Output: ViewPresentable>: Outputable {
     }
 }
 
+@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 @propertyWrapper public class TabRoute<T: TabCoordinatable, Output: ViewPresentable> {
     public var wrappedValue: Content<T, Output>
     
@@ -54,6 +57,7 @@ public class Content<T: TabCoordinatable, Output: ViewPresentable>: Outputable {
     }
 }
 
+@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 extension TabRoute where T: TabCoordinatable, Output == AnyView {
     public convenience init<ViewOutput: View, TabItem: View>(
         wrappedValue: @escaping ((T) -> (() -> ViewOutput)),
@@ -80,6 +84,7 @@ extension TabRoute where T: TabCoordinatable, Output == AnyView {
     }
 }
 
+@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 extension TabRoute where T: TabCoordinatable, Output: Coordinatable {
     public convenience init<TabItem: View>(
         wrappedValue: @escaping ((T) -> (() -> Output)),
