@@ -25,21 +25,43 @@ import Foundation
 public class RouterStore {
     public static let shared = RouterStore()
     
-    // an array of weak references
-    private var routers = [WeakRef<AnyObject>]()
+    // Use WeakMapTable for better memory management
+    private let routerTable = WeakMapTable<AnyObject, AnyObject>()
+    private var routerOrder: [WeakRef<AnyObject>] = []
+    private let lock = NSRecursiveLock()
+    
+    private init() {}
 }
 
 public extension RouterStore {
     func store<T: Routable>(router: T) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        // Clean up nil references
         cleanupRouterStore()
+        
+        // Store in WeakMapTable using router itself as key
+        // This allows automatic cleanup when router is deallocated
+        routerTable.setValue(router as AnyObject, forKey: router as AnyObject)
+        
+        // Also maintain order for LIFO retrieval
         let ref = WeakRef<AnyObject>(value: router)
-        self.routers.insert(ref, at: 0)
+        routerOrder.insert(ref, at: 0)
     }
     
     func retrieve<T: Routable>() -> T? {
-        for router in self.routers {
-            if let foundRouter = router.value as? T, router.value != nil {
-                return foundRouter
+        lock.lock()
+        defer { lock.unlock() }
+        
+        // Search through ordered routers for type match
+        // WeakMapTable automatically cleans up deallocated routers
+        for routerRef in routerOrder {
+            if let router = routerRef.value as? T {
+                // Verify it's still in the table (not deallocated)
+                if routerTable.value(forKey: router as AnyObject) != nil {
+                    return router
+                }
             }
         }
         
@@ -48,7 +70,6 @@ public extension RouterStore {
     
     /// Removes all nil weak references
     private func cleanupRouterStore() {
-        let notNilRouters = self.routers.filter({ $0.value != nil })
-        self.routers = notNilRouters
+        routerOrder = routerOrder.filter { $0.value != nil }
     }
 }
