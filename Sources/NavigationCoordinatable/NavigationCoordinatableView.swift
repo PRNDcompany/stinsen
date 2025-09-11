@@ -32,7 +32,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     @ViewBuilder
     var commonView: some View {
         rootView
-            .background(UIKitIntrospectionViewController(selector: { $0.parent }) {
+            .background(UIKitIntrospectionViewController(selector: { $0.findParent() }) {
                 presentationHelper.setupViewController($0)
             })
     }
