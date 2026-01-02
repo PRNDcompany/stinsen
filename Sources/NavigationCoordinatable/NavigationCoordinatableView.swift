@@ -9,15 +9,15 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     private let router: NavigationRouter<T>
     @StateObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
-    
+
     var start: AnyView?
-    
+
     var body: some View {
         commonView
             .environmentObject(router)
     }
-    
-    
+
+
     @ViewBuilder
     var rootView: some View {
         if  id == -1 {
@@ -28,15 +28,17 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
             EmptyView()
         }
     }
-    
+
     @ViewBuilder
     var commonView: some View {
         rootView
-            .background(UIKitIntrospectionViewController(selector: { $0.findParent() }) {
+            .background(UIKitIntrospectionViewController(
+                selector: { FindControllerUtil.findParentController(of: $0) }
+            ) {
                 presentationHelper.setupViewController($0)
             })
     }
-    
+
     init(id: Int, coordinator: T) {
         self.id = id
         self.coordinator = coordinator
@@ -57,9 +59,9 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
         }
 
         self.root = coordinator.stack.root
-        
+
         RouterStore.shared.store(router: router)
-        
+
         if let presentation = coordinator.stack.value[safe: id] {
             if let view = presentation.presentable as? AnyView {
                 self.start = view
@@ -73,3 +75,4 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
         }
     }
 }
+
