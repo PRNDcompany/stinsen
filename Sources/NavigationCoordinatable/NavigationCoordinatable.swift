@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
+@MainActor
 public protocol NavigationCoordinatable: Coordinatable {
     typealias Route = NavigationRoute
     typealias Root = NavigationRoute
@@ -279,6 +280,7 @@ public protocol NavigationCoordinatable: Coordinatable {
     ) -> Output?
 }
 
+@MainActor
 public extension NavigationCoordinatable {
     var routerStorable: Self {
         get {
@@ -360,9 +362,11 @@ public extension NavigationCoordinatable {
             self.stack.poppedTo.send(int)
         }
     }
-    
+
+    @MainActor
     func view() -> AnyView {
-        return AnyView(NavigationCoordinatableView(id: -1, coordinator: self))
+        // return AnyView(NavigationCoordinatableView(id: -1, coordinator: self))
+        AnyView(EmptyView())
     }
 
     @discardableResult func popToRoot(_ action: (() -> ())? = nil) -> Self {
