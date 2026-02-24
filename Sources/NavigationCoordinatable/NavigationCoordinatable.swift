@@ -282,8 +282,9 @@ public protocol NavigationCoordinatable: Coordinatable {
     ) -> Output?
 }
 
+@MainActor
 public extension NavigationCoordinatable {
-    var routerStorable: Self {
+    nonisolated var routerStorable: Self {
         get {
             self
         }
@@ -298,16 +299,16 @@ public extension NavigationCoordinatable {
     }
     
     // Track if dismiss is in progress to prevent duplicate calls
-    // Using a global variable since we can't have static properties in protocol extensions
+    // Uses NSHashTable with weak references for automatic cleanup on deallocation
     private var isDismissing: Bool {
         get {
-            return DismissingCoordinators.shared.contains(self.id)
+            return DismissingCoordinators.shared.contains(self)
         }
         set {
             if newValue {
-                DismissingCoordinators.shared.insert(self.id)
+                DismissingCoordinators.shared.insert(self)
             } else {
-                DismissingCoordinators.shared.remove(self.id)
+                DismissingCoordinators.shared.remove(self)
             }
         }
     }
@@ -351,21 +352,14 @@ public extension NavigationCoordinatable {
             }
             return matches
         }) else {
-            // Coordinator not found - check if it's the last item (common case)
-            if stack.value.count > 0 {
-                
-                // If we have items in stack but can't find the coordinator,
-                // it might be a re-entry scenario where IDs changed
-                // In this case, just pop the last item
-                if stack.value.count > 0 {
-                    // Create wrapper action to clear flag after completion
-                    let wrappedAction = {
-                        action?()
-                        (coordinator as? any NavigationCoordinatable)?.isDismissing = false
-                    }
-                    self.popTo(stack.value.count - 2, wrappedAction)
-                    return
+            // Coordinator not found in stack - pop the last item as fallback
+            if !stack.value.isEmpty {
+                let wrappedAction = {
+                    action?()
+                    (coordinator as? any NavigationCoordinatable)?.isDismissing = false
                 }
+                self.popTo(stack.value.count - 2, wrappedAction)
+                return
             }
             action?() // Still call the action if provided
             (coordinator as? any NavigationCoordinatable)?.isDismissing = false
@@ -380,7 +374,11 @@ public extension NavigationCoordinatable {
     }
     
     func dismissCoordinator(_ action: (() -> ())? = nil) {
-        stack.parent!.dismissChild(coordinator: self, action: action)
+        guard let parent = stack.parent else {
+            assertionFailure("dismissCoordinator: no parent to dismiss from")
+            return
+        }
+        parent.dismissChild(coordinator: self, action: action)
     }
     
     internal func setupRoot() {
@@ -548,6 +546,59 @@ public extension NavigationCoordinatable {
         return self
     }
 
+    // MARK: - Imperative Route API
+
+    /**
+     Presents a view with the given presentation type without requiring a pre-declared @Route.
+
+     - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
+     - Parameter view: The view to present.
+     - Parameter onDismiss: Optional closure called when the presented view is dismissed.
+     */
+    @discardableResult func route<Content: View>(
+        _ presentationType: AnyPresentationType,
+        to view: Content,
+        onDismiss: (() -> Void)? = nil
+    ) -> Self {
+        if let onDismiss = onDismiss {
+            stack.dismissalAction[stack.value.count - 1] = onDismiss
+        }
+        let item = NavigationStackItem(
+            presentationType: presentationType,
+            presentable: AnyView(view),
+            keyPath: ImperativeRouteId.next(),
+            input: nil
+        )
+        stack.push(item)
+        return self
+    }
+
+    /**
+     Presents a coordinator with the given presentation type without requiring a pre-declared @Route.
+
+     - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
+     - Parameter coordinator: The coordinator to present.
+     - Parameter onDismiss: Optional closure called when the presented coordinator is dismissed.
+     */
+    @discardableResult func route<Output: Coordinatable>(
+        _ presentationType: AnyPresentationType,
+        to coordinator: Output,
+        onDismiss: (() -> Void)? = nil
+    ) -> Output {
+        if let onDismiss = onDismiss {
+            stack.dismissalAction[stack.value.count - 1] = onDismiss
+        }
+        let item = NavigationStackItem(
+            presentationType: presentationType,
+            presentable: coordinator,
+            keyPath: ImperativeRouteId.next(),
+            input: nil
+        )
+        stack.push(item)
+        coordinator.parent = self
+        return coordinator
+    }
+
     @discardableResult private func _focusFirst<Input, Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: (value: Input, comparator: ((Input, Input) -> Bool))?
@@ -562,7 +613,8 @@ public extension NavigationCoordinatable {
             }
             
             guard let compareTo = item.element.input else {
-                fatalError()
+                assertionFailure("_focusFirst: expected input but got nil")
+                return false
             }
             
             return input.comparator(compareTo as! Input, input.value)
@@ -589,7 +641,8 @@ public extension NavigationCoordinatable {
             }
             
             guard let compareTo = item.element.input else {
-                fatalError()
+                assertionFailure("_focusFirst: expected input but got nil")
+                return false
             }
             
             return input.comparator(compareTo as! Input, input.value)
@@ -785,7 +838,8 @@ public extension NavigationCoordinatable {
         }
 
         guard let compareTo = stack.root.item.input else {
-            fatalError()
+            assertionFailure("_isRoot: expected input but got nil")
+            return false
         }
 
         return inputItem.comparator(compareTo as! Input, inputItem.input)
@@ -804,7 +858,8 @@ public extension NavigationCoordinatable {
         }
 
         guard let compareTo = stack.root.item.input else {
-            fatalError()
+            assertionFailure("_isRoot: expected input but got nil")
+            return false
         }
 
         return inputItem.comparator(compareTo as! Input, inputItem.input)
@@ -900,22 +955,34 @@ public extension NavigationCoordinatable {
 }
 
 // Helper class to track dismissing coordinators
-// We need this because we can't have static stored properties in protocol extensions
+// Uses NSHashTable with weak references so entries auto-clean on deallocation
 private class DismissingCoordinators {
     static let shared = DismissingCoordinators()
-    private var coordinators = Set<String>()
-    
+    private let coordinators = NSHashTable<AnyObject>.weakObjects()
+
     private init() {}
-    
-    func contains(_ id: String) -> Bool {
-        return coordinators.contains(id)
+
+    func contains(_ coordinator: AnyObject) -> Bool {
+        return coordinators.contains(coordinator)
     }
-    
-    func insert(_ id: String) {
-        coordinators.insert(id)
+
+    func insert(_ coordinator: AnyObject) {
+        coordinators.add(coordinator)
     }
-    
-    func remove(_ id: String) {
-        coordinators.remove(id)
+
+    func remove(_ coordinator: AnyObject) {
+        coordinators.remove(coordinator)
+    }
+}
+
+// MARK: - Imperative Route ID Generator
+
+/// Generates unique IDs for imperative route calls to avoid keyPath collisions.
+/// Uses negative values to avoid collision with KeyPath.hashValue (typically positive).
+private enum ImperativeRouteId {
+    private static var _counter = Int.min
+    static func next() -> Int {
+        defer { _counter += 1 }
+        return _counter
     }
 }

@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 // MARK: - Abstract base class
+@MainActor
 fileprivate class _AnyCoordinatorBase: Coordinatable {
     func view() -> AnyView {
         fatalError("must override")
@@ -58,6 +59,7 @@ fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinator
 }
 
 // MARK: - _AnyCoordinator Wrapper
+@MainActor
 public final class AnyCoordinator: Coordinatable {
     public var parent: ChildDismissable? {
         get {

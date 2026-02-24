@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Facade that coordinates stack management, presentation control, and lifecycle observation
 /// This is a thin wrapper that delegates to specialized components for better separation of concerns
+@MainActor
 final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     private let id: Int
     private weak var coordinator: T?
@@ -10,7 +11,6 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
     // Specialized components
     private let stackManager: StackManager<T>
     private let presentationController: PresentationController<T>
-    private let lifecycleObserver: LifecycleObserver<T>
     
     #if canImport(UIKit)
     // Maintained for backward compatibility
@@ -26,9 +26,8 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         return nil
     }
     
-    deinit {
-        // Presentation controller handles cleanup
-        presentationController.dismiss()
+    nonisolated deinit {
+        // ARC handles property cleanup
     }
 
     #if canImport(UIKit)
@@ -65,7 +64,6 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         // Initialize components
         self.stackManager = StackManager(id: id, coordinator: coordinator, stack: coordinator.stack)
         self.presentationController = PresentationController(id: id, coordinator: coordinator)
-        self.lifecycleObserver = LifecycleObserver(id: id, coordinator: coordinator)
         
         // Wire up components
         setupComponentConnections()
@@ -86,18 +84,3 @@ final class PresentationHelper<T: NavigationCoordinatable>: ObservableObject {
         presentationController.dismiss()
     }
 }
-
-
-#if canImport(UIKit)
-private extension ViewControllerPresented {
-    func present(parent: UIViewController, onAppear: @escaping () -> Void, onDisappear: @escaping () -> Void) {
-        guard let destination = self.viewController else { return }
-        self.presentationType.presented(
-            parent: parent,
-            content: destination,
-            onAppeared: onAppear,
-            onDismissed: onDisappear
-        )
-    }
-}
-#endif

@@ -9,11 +9,11 @@ import SwiftUI
 
 
 
-#if os(iOS)
+#if canImport(UIKit)
 public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresentationType {
 
 
-    public typealias MakeUIViewControllerHandler = (_ content: AnyView, _ dissmissHandler: @escaping () -> Void) -> ViewController
+    public typealias MakeUIViewControllerHandler = (_ content: AnyView, _ dismissHandler: @escaping () -> Void) -> ViewController
     public typealias DismissHandler = (_ viewController: UIViewController) -> Void
     public typealias PresentHandler = (_ parent: UIViewController, _ viewController: ViewController) -> Void
 
@@ -65,9 +65,10 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func makeViewController<Content>(content: Content) -> UIViewController where Content : View {
-        weak var dismissViewController: UIViewController!
+        weak var dismissViewController: UIViewController?
         let viewController = makeUIViewController(AnyView(content), {
-            dismissed(viewController: dismissViewController)
+            guard let targetViewController = dismissViewController else { return }
+            dismissed(viewController: targetViewController)
         })
         dismissViewController = viewController
         return viewController
@@ -75,22 +76,26 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {
         
-        // Handle re-entry: clear existing lifeCicleObject if present
-        if content.lifeCicleObject != nil {
-            content.lifeCicleObject = nil
+        // Handle re-entry: clear existing lifecycleObject if present
+        if content.lifecycleObject != nil {
+            content.lifecycleObject = nil
         }
 
-        let lifeCicleObject = LifeCicleObject()
+        let lifecycleObject = LifecycleObject()
         
         // Only call onDissmissed when the view controller is actually being deallocated
-        lifeCicleObject.onDeinit = {
+        lifecycleObject.onDeinit = {
             onDismissed()
         }
 
-        content.lifeCicleObject = lifeCicleObject
+        content.lifecycleObject = lifecycleObject
+        guard let typedContent = content as? ViewController else {
+            assertionFailure("UIKitPresentation: expected \(ViewController.self), got \(type(of: content))")
+            return
+        }
         presentHandler(
             parent,
-            content as! ViewController
+            typedContent
         )
         
         // Call onAppeared after presentation completes
@@ -101,8 +106,8 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
     }
 
     public func dismissed(viewController: UIViewController) {
-        // Clear lifeCicleObject to ensure clean state for re-entry
-        viewController.lifeCicleObject = nil
+        // Clear lifecycleObject to ensure clean state for re-entry
+        viewController.lifecycleObject = nil
         
         // NOTE: We need to ensure the stack is properly cleaned up when dismissing
         // The dismissHandler should handle the UI dismissal, but the stack cleanup
@@ -114,10 +119,10 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
 // MARK: - private
 private enum MapTables {
-    static let lifeCicle = WeakMapTable<UIViewController, Any>()
+    static let lifecycle = WeakMapTable<UIViewController, Any>()
 }
 
-private final class LifeCicleObject {
+private final class LifecycleObject {
     var onDeinit: (() -> Void)?
     deinit {
         onDeinit?()
@@ -125,9 +130,9 @@ private final class LifeCicleObject {
 }
 
 private extension UIViewController {
-    var lifeCicleObject: LifeCicleObject? {
-        get { MapTables.lifeCicle.value(forKey: self) as? LifeCicleObject }
-        set { MapTables.lifeCicle.setValue(newValue, forKey: self) }
+    var lifecycleObject: LifecycleObject? {
+        get { MapTables.lifecycle.value(forKey: self) as? LifecycleObject }
+        set { MapTables.lifecycle.setValue(newValue, forKey: self) }
     }
 }
 #endif

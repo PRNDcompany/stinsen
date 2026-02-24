@@ -5,10 +5,9 @@
 //  Created by wani on 2022/04/25.
 //
 
-#if os(iOS)
+#if canImport(UIKit)
 import UIKit
 
-@available(iOS 13.0, tvOS 13.0, macOS 10.15.0, *)
 class IntrospectionUIViewController: UIViewController {
     
     var handler: ((IntrospectionUIViewController) -> Void)? = nil

@@ -37,8 +37,11 @@ struct NavigationRootItem {
     private let childWrapper: WeakViewPresentable
     
     var child: ViewPresentable {
-        // Return the presentable or a placeholder if it was deallocated
-        return childWrapper.presentable ?? AnyView(EmptyView())
+        guard let presentable = childWrapper.presentable else {
+            assertionFailure("NavigationRootItem: coordinator has been deallocated")
+            return AnyView(EmptyView())
+        }
+        return presentable
     }
     
     init(keyPath: Int, input: Any?, child: ViewPresentable) {
@@ -50,6 +53,7 @@ struct NavigationRootItem {
 
 /// Wrapper around childCoordinators
 /// Used so that you don't need to write @Published
+@MainActor
 public class NavigationRoot: ObservableObject {
     @Published var item: NavigationRootItem
     
@@ -59,55 +63,38 @@ public class NavigationRoot: ObservableObject {
 }
 
 /// Represents a stack of routes
+@MainActor
 public class NavigationStack<T: NavigationCoordinatable> {
     var dismissalAction: [Int: () -> Void] = [:]
     
     weak var parent: ChildDismissable?
     
     // Combine-based state management
-    @Published private var _value: [NavigationStackItem] = []
+    // NOTE: Using CurrentValueSubject instead of @Published because
+    // @Published fires on willSet (before property update), which causes
+    // subscribers to see stale values when accessing stack.value directly.
+    // CurrentValueSubject with didSet fires AFTER the property is updated.
+    private var _value: [NavigationStackItem] = [] {
+        didSet {
+            valueSubject.send(_value)
+        }
+    }
+    private let valueSubject = CurrentValueSubject<[NavigationStackItem], Never>([])
     private let poppedSubject = PassthroughSubject<Int, Never>()
     private var cancellables = Set<AnyCancellable>()
-    
-    // Backward compatibility: maintain callback API
-    var onStackChanged: (([NavigationStackItem]) -> Void)? {
-        didSet {
-            // Subscribe to changes when callback is set
-            if let callback = onStackChanged {
-                $_value
-                    .sink { items in
-                        callback(items)
-                    }
-                    .store(in: &cancellables)
-            }
-        }
-    }
-    
-    var onPopped: ((Int) -> Void)? {
-        didSet {
-            // Subscribe to pop events when callback is set
-            if let callback = onPopped {
-                poppedSubject
-                    .sink { index in
-                        callback(index)
-                    }
-                    .store(in: &cancellables)
-            }
-        }
-    }
 
     let initial: PartialKeyPath<T>
     let initialInput: Any?
     var root: NavigationRoot!
-    
+
     // Public access to stack items (now reactive)
     var value: [NavigationStackItem] {
         return _value
     }
-    
+
     // Combine publishers for reactive programming
     var valuePublisher: AnyPublisher<[NavigationStackItem], Never> {
-        $_value.eraseToAnyPublisher()
+        valueSubject.eraseToAnyPublisher()
     }
     
     var poppedPublisher: AnyPublisher<Int, Never> {
@@ -121,11 +108,10 @@ public class NavigationStack<T: NavigationCoordinatable> {
         self.root = nil
     }
     
-    deinit {
-        // Clean up to break potential retain cycles
-        cleanup()
+    nonisolated deinit {
+        // ARC handles property cleanup
     }
-    
+
     /// Clean up references to break retain cycles
     func cleanup() {
         _value.removeAll()
@@ -138,20 +124,18 @@ public class NavigationStack<T: NavigationCoordinatable> {
     
     /// Push a new item to the stack
     func push(_ item: NavigationStackItem) {
-        
         // Check for duplicate push (same keyPath being pushed consecutively)
         if let lastItem = _value.last, lastItem.keyPath == item.keyPath {
             return
         }
-        
+
         _value.append(item)
-        // Published property will automatically notify subscribers
     }
     
     /// Pop to a specific index
     func popToIndex(_ index: Int) {
-        guard index >= -1 && index < _value.count else { 
-            return 
+        guard index >= -1 && index < _value.count else {
+            return
         }
         
         // Track coordinators that are being removed for memory leak detection
@@ -197,7 +181,6 @@ public class NavigationStack<T: NavigationCoordinatable> {
     /// Replace the entire stack
     func setStack(_ newValue: [NavigationStackItem]) {
         _value = newValue
-        // Published property will automatically notify subscribers
     }
 }
 

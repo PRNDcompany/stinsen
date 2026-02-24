@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if os(iOS)
+#if canImport(UIKit)
 public final class ViewControllerPresented {
     
     init(
@@ -15,17 +15,20 @@ public final class ViewControllerPresented {
     var presentationType: UIKitPresentationType
     
     var viewController: UIViewController? {
-        defer { strongViewController = nil }
         return weakViewController
     }
-    
+
     private var strongViewController: UIViewController?
     private weak var weakViewController: UIViewController?
-    
+
+    /// Release the strong reference after the VC has been retained by the view hierarchy
+    func releaseStrongReference() {
+        strongViewController = nil
+    }
+
     func dismiss() {
-        viewController.map {
-            presentationType.dismissed(viewController: $0)
-        }
+        guard let vc = weakViewController else { return }
+        presentationType.dismissed(viewController: vc)
     }
 }
 #else

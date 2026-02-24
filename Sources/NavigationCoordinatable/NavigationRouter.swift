@@ -7,7 +7,10 @@ import UIKit
 public final class NavigationRouter<T>: Routable {
     public let id: Int
     public var coordinator: T {
-        _coordinator.value as! T
+        guard let value = _coordinator.value as? T else {
+            preconditionFailure("NavigationRouter: coordinator has been deallocated")
+        }
+        return value
     }
     
     private var _coordinator: WeakRef<AnyObject>
@@ -23,6 +26,7 @@ public final class NavigationRouter<T>: Routable {
     }
 }
 
+@MainActor
 public extension NavigationRouter where T: NavigationCoordinatable {
     /**
      Clears the stack.
@@ -105,12 +109,44 @@ public extension NavigationRouter where T: NavigationCoordinatable {
         coordinator.route(to: route)
     }
     
+    // MARK: - Imperative Route API
+
+    /**
+     Presents a view with the given presentation type without requiring a pre-declared @Route.
+
+     - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
+     - Parameter view: The view to present.
+     - Parameter onDismiss: Optional closure called when the presented view is dismissed.
+     */
+    @discardableResult func route<Content: View>(
+        _ presentationType: AnyPresentationType,
+        to view: Content,
+        onDismiss: (() -> Void)? = nil
+    ) -> T {
+        coordinator.route(presentationType, to: view, onDismiss: onDismiss)
+    }
+
+    /**
+     Presents a coordinator with the given presentation type without requiring a pre-declared @Route.
+
+     - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
+     - Parameter coordinator: The coordinator to present.
+     - Parameter onDismiss: Optional closure called when the presented coordinator is dismissed.
+     */
+    @discardableResult func route<Output: Coordinatable>(
+        _ presentationType: AnyPresentationType,
+        to coordinator: Output,
+        onDismiss: (() -> Void)? = nil
+    ) -> Output {
+        self.coordinator.route(presentationType, to: coordinator, onDismiss: onDismiss)
+    }
+
     /**
      Searches the stack for the first route that matches the route. If found, will remove
      everything after that route.
 
      - Parameter route: The route that will be focused.
-     
+
      - Throws: `FocusError.routeNotFound`
                if the route was not found in the stack.
      */
@@ -296,7 +332,7 @@ public extension NavigationRouter where T: NavigationCoordinatable {
         return coordinator.isRoot(route)
     }
     
-    func isRootk<Output: View>(
+    func isRoot<Output: View>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
     ) -> Bool {
         return coordinator.isRoot(route)

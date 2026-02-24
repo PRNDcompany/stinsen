@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-#if os(iOS)
+#if canImport(UIKit)
 public protocol UIKitPresentationType: PresentationType {
     func makeViewController<Content: View>(content: Content) -> UIViewController
     func presented(parent: UIViewController,

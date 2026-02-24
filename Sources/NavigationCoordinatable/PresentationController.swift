@@ -12,6 +12,7 @@ import UIKit
 #endif
 
 /// Controls the presentation of views and coordinators
+@MainActor
 final class PresentationController<T: NavigationCoordinatable> {
     private let id: Int
     private weak var coordinator: T?
@@ -96,11 +97,8 @@ final class PresentationController<T: NavigationCoordinatable> {
         #endif
     }
     
-    deinit {
-        // Clean up any remaining presented views
-        if currentPresented != nil {
-            dismiss()
-        }
+    nonisolated deinit {
+        // ARC handles property cleanup
     }
 }
 
@@ -114,6 +112,8 @@ private extension ViewControllerPresented {
             onAppeared: onAppear,
             onDismissed: onDisappear
         )
+        // VC is now retained by the view hierarchy, release strong reference
+        self.releaseStrongReference()
     }
 }
 #endif

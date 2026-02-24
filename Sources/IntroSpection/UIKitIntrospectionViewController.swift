@@ -8,7 +8,7 @@
 import SwiftUI
 
 
-#if os(iOS)
+#if canImport(UIKit)
 struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewController>: UIViewControllerRepresentable {
 
     let selector: (UIViewController) -> TargetViewControllerType?
@@ -50,7 +50,7 @@ struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewControll
         _ uiViewController: IntrospectionUIViewController,
         context: UIViewControllerRepresentableContext<UIKitIntrospectionViewController>
     ) {
-        // Noting
+        // Nothing to update
     }
 
     static func dismantleUIViewController(_ uiViewController: IntrospectionUIViewController, coordinator: Coordinator) {

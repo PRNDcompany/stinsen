@@ -9,6 +9,7 @@ import Foundation
 import Combine
 
 /// Manages stack operations and coordinates with NavigationStack
+@MainActor
 final class StackManager<T: NavigationCoordinatable> {
     private let id: Int
     private weak var coordinator: T?
@@ -28,43 +29,33 @@ final class StackManager<T: NavigationCoordinatable> {
     }
     
     private func setupBindings() {
-        // Only root manager (id = -1) handles stack changes
-        guard id == -1 else { return }
-        
-        // Use Combine publishers if available, fallback to callbacks
-        if let stack = stack {
-            // Subscribe to stack changes
-            stack.valuePublisher
-                .sink { [weak self] items in
-                    self?.handleStackChanged(items)
-                }
-                .store(in: &cancellables)
-            
-            // Subscribe to pop events
-            stack.poppedPublisher
-                .sink { [weak self] index in
-                    self?.handlePopped(to: index)
-                }
-                .store(in: &cancellables)
-            
-            // Initial setup
-            handleStackChanged(stack.value)
-        }
+        guard let stack = stack else { return }
+
+        // Subscribe to stack changes
+        stack.valuePublisher
+            .sink { [weak self] items in
+                self?.handleStackChanged(items)
+            }
+            .store(in: &cancellables)
+
+        // Subscribe to pop events
+        stack.poppedPublisher
+            .sink { [weak self] index in
+                self?.handlePopped(to: index)
+            }
+            .store(in: &cancellables)
     }
-    
+
     private func handleStackChanged(_ items: [NavigationStackItem]) {
-        // Only root coordinator should handle stack changes
-        guard id == -1 else { return }
-        
-        let nextId = id + 1  // For root, nextId = 0
-        
-        // Root coordinator handles the first item (index 0) when stack has exactly 1 item
-        guard items.count == 1,
+        let nextId = id + 1
+
+        // Present the item at our level if it exists
+        // PresentationController guards against duplicate presentations
+        guard items.count > nextId,
               let item = items[safe: nextId] else {
             return
         }
-        
-        // Notify about presentation needed
+
         onPresentationNeeded?(item)
     }
     
@@ -75,7 +66,7 @@ final class StackManager<T: NavigationCoordinatable> {
         }
     }
     
-    deinit {
-        cancellables.removeAll()
+    nonisolated deinit {
+        // ARC handles property cleanup
     }
 }
