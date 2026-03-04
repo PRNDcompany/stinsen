@@ -109,15 +109,6 @@ public class NavigationStack<T: NavigationCoordinatable> {
         self.root = nil
     }
     
-    /// Clean up references to break retain cycles
-    @available(*, deprecated, message: "cleanup() is unused and will be removed in a future version")
-    func cleanup() {
-        _value.removeAll()
-        cancellables.removeAll()
-        dismissalAction.removeAll()
-        // Note: We don't set root to nil here because NavigationCoordinatableView might still need it
-    }
-    
     // MARK: - Setter Methods
     
     /// Push a new item to the stack

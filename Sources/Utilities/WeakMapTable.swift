@@ -34,30 +34,6 @@ final public class WeakMapTable<Key, Value>: @unchecked Sendable where Key: AnyO
     return self.unsafeValue(forKey: weakKey)
   }
 
-  @available(*, deprecated, message: "Unused internally. Use value(forKey:) instead.")
-  public func value(forKey key: Key, default: @autoclosure () -> Value) -> Value {
-    let weakKey = Weak(key)
-
-    self.lock.lock()
-    defer {
-      self.lock.unlock()
-      self.installDeallocHook(to: key)
-    }
-
-    if let value = self.unsafeValue(forKey: weakKey) {
-      return value
-    }
-
-    let defaultValue = `default`()
-    self.unsafeSetValue(defaultValue, forKey: weakKey)
-    return defaultValue
-  }
-
-  @available(*, deprecated, message: "Unused internally. Use value(forKey:) with manual casting instead.")
-  public func forceCastedValue<T>(forKey key: Key, default: @autoclosure () -> T) -> T {
-    return self.value(forKey: key, default: `default`() as! Value) as! T
-  }
-
   public func setValue(_ value: Value?, forKey key: Key) {
     let weakKey = Weak(key)
 

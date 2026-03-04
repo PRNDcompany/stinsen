@@ -239,27 +239,6 @@ final class NavigationStackTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
 
-    // MARK: - Memory Management Tests
-
-    func testCleanupClearsState() {
-        // Given
-        stack.dismissalAction[0] = { }
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
-        stack.push(item)
-
-        // When
-        stack.cleanup()
-
-        // Then
-        XCTAssertTrue(stack.value.isEmpty)
-        XCTAssertTrue(stack.dismissalAction.isEmpty)
-    }
-
     // MARK: - NavigationRoot Tests
 
     func testNavigationRootItemChildReference() {
