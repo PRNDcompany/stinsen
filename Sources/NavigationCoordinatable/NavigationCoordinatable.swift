@@ -908,6 +908,7 @@ public extension NavigationCoordinatable {
 
 // Helper class to track dismissing coordinators
 // Uses NSHashTable with weak references so entries auto-clean on deallocation
+@MainActor
 private class DismissingCoordinators {
     static let shared = DismissingCoordinators()
     private let coordinators = NSHashTable<AnyObject>.weakObjects()
@@ -932,7 +933,7 @@ private class DismissingCoordinators {
 /// Generates unique IDs for imperative route calls to avoid keyPath collisions.
 /// Uses negative values to avoid collision with KeyPath.hashValue (typically positive).
 private enum ImperativeRouteId {
-    private static var _counter = Int.min
+    nonisolated(unsafe) private static var _counter = Int.min
     static func next() -> Int {
         defer { _counter += 1 }
         return _counter

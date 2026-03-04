@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 
 /// Debug-only memory leak detector for coordinators
+@MainActor
 final class CoordinatorMemoryLeakDetector {
     static let shared = CoordinatorMemoryLeakDetector()
     

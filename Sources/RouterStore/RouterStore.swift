@@ -22,7 +22,8 @@ import Foundation
     }
 }
 
-public class RouterStore {
+// Thread-safe via NSRecursiveLock
+public class RouterStore: @unchecked Sendable {
     public static let shared = RouterStore()
 
     private var routerOrder: [WeakRef<AnyObject>] = []
