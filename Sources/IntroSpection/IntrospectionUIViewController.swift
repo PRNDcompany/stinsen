@@ -5,7 +5,6 @@
 //  Created by wani on 2022/04/25.
 //
 
-#if canImport(UIKit)
 import UIKit
 
 class IntrospectionUIViewController: UIViewController {
@@ -42,4 +41,3 @@ class IntrospectionUIViewController: UIViewController {
         handler?(self)
     }
 }
-#endif

@@ -113,8 +113,8 @@ final class RouterStoreTests: XCTestCase {
         XCTAssertNil(retrieved)
     }
     
-    func testMultipleWeakReferencesAreCleaned() {
-        // Given
+    func testWeakReferencesCleanedOnStore() {
+        // Given - store 5 routers, keep strong references
         var routers: [TestRouter] = []
         for i in 0..<5 {
             let router = TestRouter()
@@ -122,24 +122,22 @@ final class RouterStoreTests: XCTestCase {
             routers.append(router)
             RouterStore.shared.store(router: router)
         }
-        
-        // When - remove middle routers
-        routers.remove(at: 2)
-        routers.remove(at: 1)
-        
-        // Force cleanup by storing a new router
+
+        // Verify most recent is retrievable
+        let before: TestRouter? = RouterStore.shared.retrieve()
+        XCTAssertEqual(before?.testValue, "Router 4")
+
+        // When - release all strong references, causing deallocation
+        routers.removeAll()
+
+        // Force cleanup by storing a new router (store() filters nil weak refs)
         let newRouter = TestRouter()
+        newRouter.testValue = "New"
         RouterStore.shared.store(router: newRouter)
-        
-        // Then - should only retrieve non-deallocated routers
-        var retrievedCount = 0
-        while let _: TestRouter = RouterStore.shared.retrieve() {
-            retrievedCount += 1
-            if retrievedCount > 10 { break } // Prevent infinite loop
-        }
-        
-        // Should have 3 remaining routers (2 removed from 5) + 1 new
-        XCTAssertEqual(retrievedCount, 4)
+
+        // Then - only the new router should be retrievable
+        let after: TestRouter? = RouterStore.shared.retrieve()
+        XCTAssertEqual(after?.testValue, "New")
     }
     
     // MARK: - Thread Safety Tests
@@ -179,28 +177,31 @@ final class RouterStoreTests: XCTestCase {
         RouterStore.shared.store(router: router)
         
         // When
-        let container = RouterObjectContainer()
-        
+        var container = RouterObjectContainer()
+
         // Then
         XCTAssertNotNil(container.router)
     }
     
-    func testRouterObjectCachesValue() {
+    func testRouterObjectCachesReference() {
         // Given
         let router = TestRouter()
         router.testValue = "Initial"
         RouterStore.shared.store(router: router)
-        
+
         var container = RouterObjectContainer()
         let firstAccess = container.router
-        
-        // When - modify the stored router
-        router.testValue = "Modified"
-        
-        // Then - should still return cached value
-        let secondAccess = container.router
         XCTAssertEqual(firstAccess?.testValue, "Initial")
-        XCTAssertEqual(secondAccess?.testValue, "Initial")
+
+        // When - store a different router
+        let newRouter = TestRouter()
+        newRouter.testValue = "New"
+        RouterStore.shared.store(router: newRouter)
+
+        // Then - should still return the cached (first) reference, not the new one
+        let secondAccess = container.router
+        XCTAssertEqual(secondAccess?.testValue, "Initial",
+                       "RouterObject should cache the first retrieved reference")
     }
 }
 

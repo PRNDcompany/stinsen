@@ -5,7 +5,6 @@
 //  Created by wani on 2022/04/25.
 //
 
-#if canImport(UIKit)
 import UIKit
 
 
@@ -22,4 +21,3 @@ class IntrospectionUIView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 }
-#endif

@@ -3,7 +3,7 @@ import XCTest
 import SwiftUI
 
 // Test coordinator that intentionally creates a retain cycle
-class LeakyTestCoordinator: NavigationCoordinatable {
+final class LeakyTestCoordinator: NavigationCoordinatable {
     let stack = NavigationStack<LeakyTestCoordinator>(initial: \LeakyTestCoordinator.start)
     
     @Root var start = makeStart
@@ -26,7 +26,7 @@ class LeakyTestCoordinator: NavigationCoordinatable {
 }
 
 // Test coordinator without retain cycle
-class NonLeakyTestCoordinator: NavigationCoordinatable {
+final class NonLeakyTestCoordinator: NavigationCoordinatable {
     let stack = NavigationStack<NonLeakyTestCoordinator>(initial: \NonLeakyTestCoordinator.start)
     
     @Root var start = makeStart
@@ -42,7 +42,7 @@ class NonLeakyTestCoordinator: NavigationCoordinatable {
 
 class MemoryLeakDetectionTests: XCTestCase {
     
-    func testMemoryLeakDetection() {
+    @MainActor func testMemoryLeakDetection() {
         // This test demonstrates the memory leak detection
         // In a real app, this would show an alert
         
@@ -66,7 +66,7 @@ class MemoryLeakDetectionTests: XCTestCase {
         wait(for: [expectation], timeout: 3.0)
     }
     
-    func testNoMemoryLeakForProperlyDeallocatedCoordinator() {
+    @MainActor func testNoMemoryLeakForProperlyDeallocatedCoordinator() {
         let expectation = XCTestExpectation(description: "No memory leak for proper deallocation")
         
         // Create a coordinator without retain cycle

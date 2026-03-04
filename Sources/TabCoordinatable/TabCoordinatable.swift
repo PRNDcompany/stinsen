@@ -2,13 +2,10 @@ import Foundation
 import SwiftUI
 
 /// The TabCoordinatable is used to represent a coordinator with a TabView
+@MainActor
 public protocol TabCoordinatable: Coordinatable {
     typealias Route = TabRoute
     typealias Router = TabRouter<Self>
-    associatedtype RouterStoreType
-
-    var routerStorable: RouterStoreType { get }
-
     var child: TabChild { get }
 
     associatedtype CustomizeViewType: View
@@ -30,7 +27,7 @@ public protocol TabCoordinatable: Coordinatable {
     @discardableResult func focusFirst<Output: Coordinatable>(
         _ route: KeyPath<Self, Content<Self, Output>>
     ) -> Output
-    
+
     /**
      Searches the tabbar for the first route that matches the route and makes it the active tab.
 
@@ -41,17 +38,12 @@ public protocol TabCoordinatable: Coordinatable {
     ) -> Self
 }
 
+@MainActor
 public extension TabCoordinatable {
-    var routerStorable: Self {
-        get {
-            self
-        }
-    }
-
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         fatalError("Not implemented")
     }
-    
+
     var parent: ChildDismissable? {
         get {
             return child.parent
@@ -59,13 +51,13 @@ public extension TabCoordinatable {
             child.parent = newValue
         }
     }
-    
+
     func setupAllTabs() {
         var all: [TabChildItem] = []
-        
+
         for abs in self.child.startingItems {
             let ina = self[keyPath: abs]
-            
+
             if let val = ina as? Outputable {
                 all.append(
                     TabChildItem(
@@ -85,10 +77,10 @@ public extension TabCoordinatable {
                 )
             }
         }
-        
+
         self.child.allItems = all
     }
-    
+
     func customize(_ view: AnyView) -> some View {
         return view
     }
@@ -102,29 +94,29 @@ public extension TabCoordinatable {
             )
         )
     }
-    
+
     @discardableResult func focusFirst<Output: Coordinatable>(
         _ route: KeyPath<Self, Content<Self, Output>>
     ) -> Output {
         if child.allItems == nil {
             setupAllTabs()
         }
-        
+
         guard let value = child.allItems.enumerated().first(where: { item in
             guard item.element.keyPathIsEqual(route) else {
                 return false
             }
-            
+
             return true
         }) else {
             fatalError()
         }
-        
+
         self.child.activeTab = value.offset
-        
+
         return value.element.presentable as! Output
     }
-    
+
     @discardableResult func focusFirst<Output: View>(
         _ route: KeyPath<Self, Content<Self, Output>>
     ) -> Self {
@@ -136,14 +128,83 @@ public extension TabCoordinatable {
             guard item.element.keyPathIsEqual(route) else {
                 return false
             }
-            
+
             return true
         }) else {
             fatalError()
         }
-        
+
         self.child.activeTab = value.offset
-        
+
         return self
+    }
+
+    // MARK: - Imperative Tab API
+
+    /// Adds a view as a tab.
+    @discardableResult
+    func addTab<Content: View, TabItem: View>(
+        _ view: Content,
+        tabItem: @escaping (Bool) -> TabItem,
+        onTapped: ((Bool) -> Void)? = nil
+    ) -> Self {
+        if child.allItems == nil { child.allItems = [] }
+
+        child.allItems.append(
+            TabChildItem(
+                presentable: AnyView(view),
+                keyPathIsEqual: { _ in false },
+                tabItem: { AnyView(tabItem($0)) },
+                onTapped: { isRepeat in onTapped?(isRepeat) }
+            )
+        )
+
+        if child.allItems.count == 1 {
+            child.activeItem = child.allItems[0]
+        }
+
+        return self
+    }
+
+    /// Adds a coordinator as a tab.
+    @discardableResult
+    func addTab<Output: Coordinatable, TabItem: View>(
+        _ coordinator: Output,
+        tabItem: @escaping (Bool) -> TabItem,
+        onTapped: ((Bool, Output) -> Void)? = nil
+    ) -> Output {
+        if child.allItems == nil { child.allItems = [] }
+
+        child.allItems.append(
+            TabChildItem(
+                presentable: coordinator,
+                keyPathIsEqual: { _ in false },
+                tabItem: { AnyView(tabItem($0)) },
+                onTapped: { isRepeat in onTapped?(isRepeat, coordinator) }
+            )
+        )
+
+        if child.allItems.count == 1 {
+            child.activeItem = child.allItems[0]
+        }
+
+        return coordinator
+    }
+
+    /// Adds a view as a tab without a tab item (for custom tab bars).
+    @discardableResult
+    func addTab<Content: View>(_ view: Content) -> Self {
+        addTab(view, tabItem: { _ in EmptyView() })
+    }
+
+    /// Adds a coordinator as a tab without a tab item (for custom tab bars).
+    @discardableResult
+    func addTab<Output: Coordinatable>(_ coordinator: Output) -> Output {
+        addTab(coordinator, tabItem: { (_: Bool) in EmptyView() })
+    }
+
+    /// Selects the tab at the given index.
+    func selectTab(_ index: Int) {
+        child.activeTab = index
     }
 }

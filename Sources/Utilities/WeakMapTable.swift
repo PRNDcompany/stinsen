@@ -33,6 +33,7 @@ final public class WeakMapTable<Key, Value> where Key: AnyObject {
     return self.unsafeValue(forKey: weakKey)
   }
 
+  @available(*, deprecated, message: "Unused internally. Use value(forKey:) instead.")
   public func value(forKey key: Key, default: @autoclosure () -> Value) -> Value {
     let weakKey = Weak(key)
 
@@ -51,6 +52,7 @@ final public class WeakMapTable<Key, Value> where Key: AnyObject {
     return defaultValue
   }
 
+  @available(*, deprecated, message: "Unused internally. Use value(forKey:) with manual casting instead.")
   public func forceCastedValue<T>(forKey key: Key, default: @autoclosure () -> T) -> T {
     return self.value(forKey: key, default: `default`() as! Value) as! T
   }

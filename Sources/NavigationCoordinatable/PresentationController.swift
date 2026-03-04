@@ -7,9 +7,7 @@
 
 import Foundation
 import SwiftUI
-#if canImport(UIKit)
 import UIKit
-#endif
 
 /// Controls the presentation of views and coordinators
 @MainActor
@@ -17,9 +15,7 @@ final class PresentationController<T: NavigationCoordinatable> {
     private let id: Int
     private weak var coordinator: T?
     
-    #if canImport(UIKit)
     private weak var currentViewController: UIViewController?
-    #endif
     private var currentPresented: ViewControllerPresented?
     
     init(id: Int, coordinator: T) {
@@ -27,10 +23,9 @@ final class PresentationController<T: NavigationCoordinatable> {
         self.coordinator = coordinator
     }
     
-    #if canImport(UIKit)
     func setupViewController(_ viewController: UIViewController) {
         currentViewController = viewController
-        
+
         // Register this view controller in the stack
         if let coordinator = coordinator,
            id >= 0 && id < coordinator.stack.value.count {
@@ -39,26 +34,20 @@ final class PresentationController<T: NavigationCoordinatable> {
             updatedStack[id].viewController = viewController
             coordinator.stack.setStack(updatedStack)
         }
-        
+
         // Present if we have something waiting
         if let presented = currentPresented {
             presentViewIfNeeded(presented)
         }
     }
-    #else
-    func setupViewController(_ viewController: Any) {
-        // Non-UIKit platforms don't use this
-    }
-    #endif
     
     func present(item: NavigationStackItem) {
         // Check if already presenting
         guard currentPresented == nil else { return }
         
-        let presentable = item.presentable
         guard let coordinator = coordinator,
               let presented = item.presentationType.makePresented(
-                presentable: presentable,
+                content: item.content,
                 nextId: id + 1,
                 coordinator: coordinator
               ) else {
@@ -70,18 +59,15 @@ final class PresentationController<T: NavigationCoordinatable> {
     }
     
     func dismiss() {
-        #if canImport(UIKit)
         if let presented = currentPresented {
             presented.dismiss()
         }
-        #endif
         currentPresented = nil
     }
     
     private func presentViewIfNeeded(_ presented: ViewControllerPresented) {
-        #if canImport(UIKit)
         guard let parent = currentViewController else { return }
-        
+
         presented.present(
             parent: parent,
             onAppear: { [weak self] in
@@ -94,15 +80,10 @@ final class PresentationController<T: NavigationCoordinatable> {
                 self?.coordinator?.disappear(disappearId)
             }
         )
-        #endif
     }
     
-    nonisolated deinit {
-        // ARC handles property cleanup
-    }
 }
 
-#if canImport(UIKit)
 private extension ViewControllerPresented {
     func present(parent: UIViewController, onAppear: @escaping () -> Void, onDisappear: @escaping () -> Void) {
         guard let destination = self.viewController else { return }
@@ -116,4 +97,3 @@ private extension ViewControllerPresented {
         self.releaseStrongReference()
     }
 }
-#endif

@@ -1,6 +1,5 @@
 //  Copyright © 2026 PRND. All rights reserved.
 
-#if canImport(UIKit)
 import UIKit
 
 
@@ -32,4 +31,3 @@ enum FindControllerUtil {
         return nil
     }
 }
-#endif

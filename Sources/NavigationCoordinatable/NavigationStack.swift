@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import Combine
 
 // Wrapper to break retain cycles - holds weak reference to coordinators
@@ -108,11 +109,8 @@ public class NavigationStack<T: NavigationCoordinatable> {
         self.root = nil
     }
     
-    nonisolated deinit {
-        // ARC handles property cleanup
-    }
-
     /// Clean up references to break retain cycles
+    @available(*, deprecated, message: "cleanup() is unused and will be removed in a future version")
     func cleanup() {
         _value.removeAll()
         cancellables.removeAll()
@@ -149,7 +147,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
         
         // Track each coordinator being removed
         for item in itemsBeingRemoved {
-            if let coordinator = item.presentable as? any Coordinatable {
+            if case .coordinator(let coordinator) = item.content {
                 coordinator.trackForMemoryLeak()
             }
         }
@@ -164,19 +162,17 @@ public class NavigationStack<T: NavigationCoordinatable> {
         // Published property will automatically notify subscribers
     }
     
-    #if canImport(UIKit)
     /// Pop to a specific view controller
     func popToViewController(_ viewController: UIViewController) {
         if let index = _value.firstIndex(where: { $0.viewController === viewController }) {
             popToIndex(index)
         }
     }
-    
+
     /// Find the index of a view controller in the stack
     func indexOfViewController(_ viewController: UIViewController) -> Int? {
         return _value.firstIndex(where: { $0.viewController === viewController })
     }
-    #endif
     
     /// Replace the entire stack
     func setStack(_ newValue: [NavigationStackItem]) {
@@ -204,41 +200,38 @@ public extension NavigationStack {
     }
 }
 
+/// Preserves compile-time type information from route methods.
+/// Route methods know whether Output is View or Coordinatable via generics —
+/// this enum carries that distinction through the stack instead of erasing it to ViewPresentable.
+@MainActor
+public enum StackItemContent {
+    case view(AnyView)
+    case coordinator(any Coordinatable)
+}
+
 struct NavigationStackItem {
     let presentationType: PresentationType
-    let presentable: ViewPresentable
+    let content: StackItemContent
     let keyPath: Int
     let input: Any?
-    
-    #if canImport(UIKit)
+
     // Store weak reference using WeakRef wrapper
     var viewControllerRef: WeakRef<UIViewController>?
-    
+
     var viewController: UIViewController? {
         get { viewControllerRef?.value }
         set { viewControllerRef = newValue.map { WeakRef(value: $0) } }
     }
-    
-    init(presentationType: PresentationType, 
-         presentable: ViewPresentable,
+
+    init(presentationType: PresentationType,
+         content: StackItemContent,
          keyPath: Int,
          input: Any?,
          viewController: UIViewController? = nil) {
         self.presentationType = presentationType
-        self.presentable = presentable
+        self.content = content
         self.keyPath = keyPath
         self.input = input
         self.viewControllerRef = viewController.map { WeakRef(value: $0) }
     }
-    #else
-    init(presentationType: PresentationType,
-         presentable: ViewPresentable,
-         keyPath: Int,
-         input: Any?) {
-        self.presentationType = presentationType
-        self.presentable = presentable
-        self.keyPath = keyPath
-        self.input = input
-    }
-    #endif
 }

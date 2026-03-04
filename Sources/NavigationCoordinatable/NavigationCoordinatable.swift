@@ -1,10 +1,9 @@
 import Foundation
 import SwiftUI
 import Combine
-#if canImport(UIKit)
 import UIKit
-#endif
 
+@MainActor
 public protocol NavigationCoordinatable: Coordinatable {
     typealias Route = NavigationRoute
     typealias Root = NavigationRoute
@@ -342,8 +341,7 @@ public extension NavigationCoordinatable {
         
         // Try to find the coordinator in the stack
         guard let value = stack.value.firstIndex(where: { item in
-            // Check if the presentable is a Coordinatable (which always has an id)
-            guard let presentable = item.presentable as? any Coordinatable else {
+            guard case .coordinator(let presentable) = item.content else {
                 return false
             }
             
@@ -394,17 +392,9 @@ public extension NavigationCoordinatable {
         self.stack.root = NavigationRoot(item: item)
     }
     
-    internal func appear(_ int: Int) {
-        // NOTE: Original implementation called popTo(int, nil) which is incorrect.
-        // "appear" should not trigger navigation changes, it should only track visibility.
-        // Navigation changes should be explicit through push/pop/dismiss methods.
-        
-        // For now, we'll just track the appearance without causing navigation side effects.
-        // If you need to sync navigation state, do it explicitly, not as a side effect of appearing.
-        
-        // Could potentially track visible view controllers here if needed:
-        // self.visibleIndex = int
-    }
+    /// Called when a view controller appears. Intentionally a no-op;
+    /// navigation state changes should be explicit through push/pop/dismiss.
+    internal func appear(_ int: Int) { }
 
     internal func disappear(_ id: Int) {
         
@@ -465,7 +455,7 @@ public extension NavigationCoordinatable {
         let output = transition.closure(self)(input)
         let item = NavigationStackItem(
             presentationType: transition.type.type,
-            presentable: output,
+            content: .coordinator(output),
             keyPath: route.hashValue,
             input: input
         )
@@ -473,7 +463,7 @@ public extension NavigationCoordinatable {
         output.parent = self
         return output
     }
-    
+
     @discardableResult func route<Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
@@ -481,7 +471,7 @@ public extension NavigationCoordinatable {
         stack.dismissalAction[stack.value.count - 1] = onDismiss
         return self.route(to: route)
     }
-    
+
     @discardableResult func route<Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>
     ) -> Output {
@@ -489,7 +479,7 @@ public extension NavigationCoordinatable {
         let output = transition.closure(self)(())
         let item = NavigationStackItem(
             presentationType: transition.type.type,
-            presentable: output,
+            content: .coordinator(output),
             keyPath: route.hashValue,
             input: nil
         )
@@ -497,7 +487,7 @@ public extension NavigationCoordinatable {
         output.parent = self
         return output
     }
-    
+
     @discardableResult func route<Input, Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input,
@@ -506,7 +496,7 @@ public extension NavigationCoordinatable {
         stack.dismissalAction[stack.value.count - 1] = onDismiss
         return self.route(to: route, input)
     }
-    
+
     @discardableResult func route<Input, Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input
@@ -515,14 +505,14 @@ public extension NavigationCoordinatable {
         let output = transition.closure(self)(input)
         let item = NavigationStackItem(
             presentationType: transition.type.type,
-            presentable: output,
+            content: .view(AnyView(output)),
             keyPath: route.hashValue,
             input: input
         )
         stack.push(item)
         return self
     }
-    
+
     @discardableResult func route<Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
@@ -530,7 +520,7 @@ public extension NavigationCoordinatable {
         stack.dismissalAction[stack.value.count - 1] = onDismiss
         return self.route(to: route)
     }
-    
+
     @discardableResult func route<Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>
     ) -> Self {
@@ -538,7 +528,7 @@ public extension NavigationCoordinatable {
         let output = transition.closure(self)(())
         let item = NavigationStackItem(
             presentationType: transition.type.type,
-            presentable: output,
+            content: .view(AnyView(output)),
             keyPath: route.hashValue,
             input: nil
         )
@@ -565,7 +555,7 @@ public extension NavigationCoordinatable {
         }
         let item = NavigationStackItem(
             presentationType: presentationType,
-            presentable: AnyView(view),
+            content: .view(AnyView(view)),
             keyPath: ImperativeRouteId.next(),
             input: nil
         )
@@ -590,7 +580,7 @@ public extension NavigationCoordinatable {
         }
         let item = NavigationStackItem(
             presentationType: presentationType,
-            presentable: coordinator,
+            content: .coordinator(coordinator),
             keyPath: ImperativeRouteId.next(),
             input: nil
         )
@@ -599,59 +589,53 @@ public extension NavigationCoordinatable {
         return coordinator
     }
 
+    /// Finds the first stack item matching the given route and input, then pops to it.
+    /// Returns the matched item for further processing.
+    @discardableResult
+    private func _popToFirstMatch<Input, Output: ViewPresentable>(
+        _ route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
+        _ input: (value: Input, comparator: ((Input, Input) -> Bool))?
+    ) throws -> NavigationStackItem {
+        guard let value = stack.value.enumerated().first(where: { item in
+            guard item.element.keyPath == route.hashValue else {
+                return false
+            }
+
+            guard let input = input else {
+                return true
+            }
+
+            guard let compareTo = item.element.input else {
+                assertionFailure("_focusFirst: expected input but got nil")
+                return false
+            }
+
+            return input.comparator(compareTo as! Input, input.value)
+        }) else {
+            throw FocusError.routeNotFound
+        }
+
+        self.popTo(value.offset, nil)
+        return value.element
+    }
+
     @discardableResult private func _focusFirst<Input, Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: (value: Input, comparator: ((Input, Input) -> Bool))?
     ) throws -> Output {
-        guard let value = stack.value.enumerated().first(where: { item in
-            guard item.element.keyPath == route.hashValue else {
-                return false
-            }
-            
-            guard let input = input else {
-                return true
-            }
-            
-            guard let compareTo = item.element.input else {
-                assertionFailure("_focusFirst: expected input but got nil")
-                return false
-            }
-            
-            return input.comparator(compareTo as! Input, input.value)
-        }) else {
-            throw FocusError.routeNotFound
+        let matched = try _popToFirstMatch(route, input)
+        guard case .coordinator(let c) = matched.content else {
+            assertionFailure("focusFirst: expected coordinator in stack")
+            fatalError()
         }
-        
-        self.popTo(value.offset, nil)
-        
-        return value.element.presentable as! Output
+        return c as! Output
     }
-    
+
     @discardableResult private func _focusFirst<Input, Output: View>(
         _ route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: (value: Input, comparator: ((Input, Input) -> Bool))?
     ) throws -> Self {
-        guard let value = stack.value.enumerated().first(where: { item in
-            guard item.element.keyPath == route.hashValue else {
-                return false
-            }
-            
-            guard let input = input else {
-                return true
-            }
-            
-            guard let compareTo = item.element.input else {
-                assertionFailure("_focusFirst: expected input but got nil")
-                return false
-            }
-            
-            return input.comparator(compareTo as! Input, input.value)
-        }) else {
-            throw FocusError.routeNotFound
-        }
-        
-        self.popTo(value.offset, nil)
-        
+        try _popToFirstMatch(route, input)
         return self
     }
     
@@ -713,62 +697,50 @@ public extension NavigationCoordinatable {
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
     ) -> Output {
-        if stack.root.item.keyPath == route.hashValue {
-            if let inputItem = inputItem {
-                if inputItem.comparator(inputItem.input, stack.root.item.input! as! Input) == true {
-                    return stack.root.item.child as! Output
-                }
-            } else {
-                return stack.root.item.child as! Output
-            }
+        if _isRoot(route, inputItem: inputItem) {
+            return stack.root.item.child as! Output
         }
-        
-        let output: Output
-        
-        if let input = inputItem?.input {
-            output = self[keyPath: route].closure(self)(input)
-        } else {
-            output = self[keyPath: route].closure(self)(() as! Input)
-        }
-        
+
+        let output: Output = _createRouteOutput(route, input: inputItem?.input)
+
         stack.root.item = NavigationRootItem(
             keyPath: route.hashValue,
             input: inputItem?.input,
             child: output
         )
-        
+
         return output
     }
-    
+
     @discardableResult private func _root<Output: View, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
     ) -> Self {
-        if stack.root.item.keyPath == route.hashValue {
-            if let inputItem = inputItem {
-                if inputItem.comparator(inputItem.input, stack.root.item.input! as! Input) == true {
-                    return self
-                }
-            } else {
-                return self
-            }
+        if _isRoot(route, inputItem: inputItem) {
+            return self
         }
-        
-        let output: Output
-        
-        if let input = inputItem?.input {
-            output = self[keyPath: route].closure(self)(input)
-        } else {
-            output = self[keyPath: route].closure(self)(() as! Input)
-        }
-        
+
+        let output: Output = _createRouteOutput(route, input: inputItem?.input)
+
         stack.root.item = NavigationRootItem(
             keyPath: route.hashValue,
             input: inputItem?.input,
             child: AnyView(output)
         )
-        
+
         return self
+    }
+
+    /// Creates a route output by invoking the transition's closure with the given input.
+    private func _createRouteOutput<U: RouteType, Input, Output: ViewPresentable>(
+        _ route: KeyPath<Self, Transition<Self, U, Input, Output>>,
+        input: Input?
+    ) -> Output {
+        if let input = input {
+            return self[keyPath: route].closure(self)(input)
+        } else {
+            return self[keyPath: route].closure(self)(() as! Input)
+        }
     }
     
     @discardableResult func root<Output: Coordinatable>(
@@ -825,34 +797,14 @@ public extension NavigationCoordinatable {
         self._root(route, inputItem: (input, { $0 == $1 }))
     }
     
-    private func _isRoot<Input, Output: Coordinatable>(
+    private func _isRoot<Input, Output: ViewPresentable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
     ) -> Bool {
         guard stack.root.item.keyPath == route.hashValue else {
             return false
         }
-        
-        guard let inputItem = inputItem else {
-            return true
-        }
 
-        guard let compareTo = stack.root.item.input else {
-            assertionFailure("_isRoot: expected input but got nil")
-            return false
-        }
-
-        return inputItem.comparator(compareTo as! Input, inputItem.input)
-    }
-    
-    private func _isRoot<Input, Output: View>(
-        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
-    ) -> Bool {
-        guard stack.root.item.keyPath == route.hashValue else {
-            return false
-        }
-        
         guard let inputItem = inputItem else {
             return true
         }

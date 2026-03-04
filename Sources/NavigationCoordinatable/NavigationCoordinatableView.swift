@@ -63,7 +63,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
         RouterStore.shared.store(router: router)
 
         if let presentation = coordinator.stack.value[safe: id] {
-            if let view = presentation.presentable as? AnyView {
+            if case .view(let view) = presentation.content {
                 self.start = view
             } else {
                 fatalError("Can only show views")

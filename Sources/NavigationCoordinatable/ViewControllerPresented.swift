@@ -1,8 +1,8 @@
 import SwiftUI
+import UIKit
 
-#if canImport(UIKit)
 public final class ViewControllerPresented {
-    
+
     init(
         viewController: UIViewController? = nil,
         presentationType: UIKitPresentationType
@@ -11,9 +11,9 @@ public final class ViewControllerPresented {
         self.strongViewController = viewController
         self.weakViewController = viewController
     }
-    
+
     var presentationType: UIKitPresentationType
-    
+
     var viewController: UIViewController? {
         return weakViewController
     }
@@ -31,9 +31,3 @@ public final class ViewControllerPresented {
         presentationType.dismissed(viewController: vc)
     }
 }
-#else
-// Placeholder for non-iOS platforms
-public class ViewControllerPresented {
-    // Empty implementation for non-iOS platforms
-}
-#endif

@@ -1,6 +1,7 @@
 import SwiftUI
 import Foundation
 
+@MainActor
 public class TabRouter<T>: Routable {
     public var coordinator: T {
         _coordinator.value as! T
@@ -13,6 +14,7 @@ public class TabRouter<T>: Routable {
     }
 }
 
+@MainActor
 public extension TabRouter where T: TabCoordinatable {
     /**
      Searches the tabbar for the first route that matches the route and makes it the active tab.
@@ -34,5 +36,10 @@ public extension TabRouter where T: TabCoordinatable {
         _ route: KeyPath<T, Content<T, Output>>
     ) -> T {
         self.coordinator.focusFirst(route)
+    }
+
+    /// Selects the tab at the given index.
+    func selectTab(_ index: Int) {
+        coordinator.selectTab(index)
     }
 }

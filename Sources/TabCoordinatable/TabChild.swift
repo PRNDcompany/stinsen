@@ -10,6 +10,7 @@ struct TabChildItem {
 
 /// Wrapper around childCoordinators
 /// Used so that you don't need to write @Published
+@MainActor
 public class TabChild: ObservableObject {
     weak var parent: ChildDismissable?
     public let startingItems: [AnyKeyPath]
@@ -30,6 +31,12 @@ public class TabChild: ObservableObject {
     public init(startingItems: [AnyKeyPath], activeTab: Int = 0) {
         self.startingItems = startingItems
         self.activeTab = activeTab
+    }
+
+    /// Imperative initializer - use with `addTab` methods on TabCoordinatable
+    public convenience init(activeTab: Int = 0) {
+        self.init(startingItems: [], activeTab: activeTab)
+        self.allItems = []
     }
 }
 

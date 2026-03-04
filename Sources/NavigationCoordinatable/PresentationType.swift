@@ -4,5 +4,5 @@ import SwiftUI
 
 
 public protocol PresentationType {
-    func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> ViewControllerPresented?
+    func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented?
 }

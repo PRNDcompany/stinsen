@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-#if canImport(UIKit)
 public protocol UIKitPresentationType: PresentationType {
     func makeViewController<Content: View>(content: Content) -> UIViewController
     func presented(parent: UIViewController,
@@ -16,4 +15,3 @@ public protocol UIKitPresentationType: PresentationType {
                    onDismissed: @escaping () -> Void)
     func dismissed(viewController: UIViewController)
 }
-#endif

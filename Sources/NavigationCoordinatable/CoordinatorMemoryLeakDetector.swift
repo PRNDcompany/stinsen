@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(UIKit)
 import UIKit
-#endif
 
 /// Debug-only memory leak detector for coordinators
 final class CoordinatorMemoryLeakDetector {
@@ -44,7 +42,6 @@ final class CoordinatorMemoryLeakDetector {
         Check for retain cycles or strong references.
         """
         
-        #if canImport(UIKit)
         // Show alert on iOS
         DispatchQueue.main.async {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -55,21 +52,16 @@ final class CoordinatorMemoryLeakDetector {
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
-                
+
                 // Find the topmost view controller
                 var topController = rootViewController
                 while let presented = topController.presentedViewController {
                     topController = presented
                 }
-                
+
                 topController.present(alert, animated: true)
             }
         }
-        return
-        #endif
-        
-        // Trigger assertion for debugging (works on all platforms in DEBUG mode)
-        assertionFailure("Memory leak detected: \(coordinatorType) at \(fileName):\(line) in \(function)")
         #endif
     }
 }

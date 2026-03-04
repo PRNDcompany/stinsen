@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 // MARK: - Abstract base class
+@available(*, deprecated, message: "AnyCoordinator is unused and will be removed in a future version")
 @MainActor
 fileprivate class _AnyCoordinatorBase: Coordinatable {
     func view() -> AnyView {
@@ -32,6 +33,7 @@ fileprivate class _AnyCoordinatorBase: Coordinatable {
 }
 
 // MARK: - Box container class
+@available(*, deprecated, message: "AnyCoordinator is unused and will be removed in a future version")
 fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinatorBase {
     var base: Base
     
@@ -59,6 +61,7 @@ fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinator
 }
 
 // MARK: - _AnyCoordinator Wrapper
+@available(*, deprecated, message: "AnyCoordinator is unused and will be removed in a future version")
 @MainActor
 public final class AnyCoordinator: Coordinatable {
     public var parent: ChildDismissable? {

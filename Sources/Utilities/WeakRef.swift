@@ -12,13 +12,4 @@ final class WeakRef<T: AnyObject>: Equatable {
         self.value = value
     }
 
-    private init() {
-        self.value = nil
-    }
-}
-
-extension WeakRef {
-    static var empty: WeakRef<T> {
-        WeakRef()
-    }
 }

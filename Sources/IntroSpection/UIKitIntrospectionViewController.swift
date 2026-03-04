@@ -8,7 +8,6 @@
 import SwiftUI
 
 
-#if canImport(UIKit)
 struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewController>: UIViewControllerRepresentable {
 
     let selector: (UIViewController) -> TargetViewControllerType?
@@ -63,4 +62,3 @@ struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewControll
     }
 
 }
-#endif

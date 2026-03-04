@@ -9,7 +9,6 @@ import SwiftUI
 
 
 
-#if canImport(UIKit)
 public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresentationType {
 
 
@@ -39,7 +38,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
                navigationController.viewControllers.count > 2 {
                 viewController.navigationController?.popViewController(animated: true)
             } else {
-                // NOTE: - 위에 띄워둔게 있을 경우 한번에 닫히기 위해서
+                // NOTE: Dismiss from presenting VC to close any presented VCs at once
                 if viewController.presentedViewController != nil {
                     viewController.presentingViewController?.dismiss(animated: true)
                 } else {
@@ -49,16 +48,17 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         }
     }
 
-    public func makePresented<T: NavigationCoordinatable>(presentable: ViewPresentable, nextId: Int, coordinator: T) -> ViewControllerPresented? {
-        if presentable is AnyView {
+    public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented? {
+        switch content {
+        case .view:
             let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
             return ViewControllerPresented(
                 viewController: makeViewController(content: view),
                 presentationType: self
             )
-        } else {
+        case .coordinator(let c):
             return ViewControllerPresented(
-                viewController: makeViewController(content: presentable.view()),
+                viewController: makeViewController(content: c.view()),
                 presentationType: self
             )
         }
@@ -83,7 +83,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
 
         let lifecycleObject = LifecycleObject()
         
-        // Only call onDissmissed when the view controller is actually being deallocated
+        // Only call onDismissed when the view controller is actually being deallocated
         lifecycleObject.onDeinit = {
             onDismissed()
         }
@@ -111,7 +111,7 @@ public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresenta
         
         // NOTE: We need to ensure the stack is properly cleaned up when dismissing
         // The dismissHandler should handle the UI dismissal, but the stack cleanup
-        // should be handled by the coordinator through the onDissmissed callback
+        // should be handled by the coordinator through the onDismissed callback
         dismissHandler(viewController)
     }
 
@@ -135,4 +135,3 @@ private extension UIViewController {
         set { MapTables.lifecycle.setValue(newValue, forKey: self) }
     }
 }
-#endif

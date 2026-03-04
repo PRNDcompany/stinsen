@@ -1,16 +1,17 @@
 //
-//  StackManager.swift
+//  NavigationStackObserver.swift
 //  Stinsen
 //
-//  Manages navigation stack operations
+//  Observes navigation stack changes via Combine and triggers presentation callbacks
 //
 
 import Foundation
 import Combine
 
-/// Manages stack operations and coordinates with NavigationStack
+/// Observes NavigationStack changes via Combine subscriptions and
+/// triggers presentation/dismissal callbacks when the stack mutates.
 @MainActor
-final class StackManager<T: NavigationCoordinatable> {
+final class NavigationStackObserver<T: NavigationCoordinatable> {
     private let id: Int
     private weak var coordinator: T?
     private weak var stack: NavigationStack<T>?
@@ -65,8 +66,7 @@ final class StackManager<T: NavigationCoordinatable> {
             onDismissalNeeded?()
         }
     }
-    
-    nonisolated deinit {
-        // ARC handles property cleanup
-    }
 }
+
+@available(*, deprecated, renamed: "NavigationStackObserver")
+typealias StackManager = NavigationStackObserver
