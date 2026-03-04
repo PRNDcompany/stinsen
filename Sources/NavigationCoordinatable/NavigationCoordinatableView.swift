@@ -21,28 +21,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     @ViewBuilder
     var rootView: some View {
         if id == -1 {
-            ZStack {
-                if root.activeSlot == 0, let slotItem = root.slots[0] {
-                    AnyView(coordinator.customize(AnyView(slotItem.child.view())))
-                        .zIndex(root.slotZIndex[0])
-                        .transition(root.slotTransitions[0])
-                }
-                if root.activeSlot == 1, let slotItem = root.slots[1] {
-                    AnyView(coordinator.customize(AnyView(slotItem.child.view())))
-                        .zIndex(root.slotZIndex[1])
-                        .transition(root.slotTransitions[1])
-                }
-            }
-            .onChange(of: root.pendingTransitionId) { id in
-                guard id != nil,
-                      let animation = root.pendingAnimation,
-                      let newItem = root.pendingItem else { return }
-                withAnimation(animation) {
-                    root.item = newItem
-                    root.activeSlot = root.pendingSlot
-                    root.pendingTransitionId = nil
-                }
-            }
+            NavigationRootView(root: root, coordinator: coordinator)
         } else if let start = self.start {
             start
         } else {
@@ -97,3 +76,43 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     }
 }
 
+
+// MARK: - NavigationRootView
+
+/// Renders the two-slot root view with animated transitions.
+///
+/// Two-slot design is intentional: each slot independently holds its own
+/// NavigationRootItem, preventing the "two B views" bug that a single
+/// .id()-based approach causes. The onChange two-phase commit ensures
+/// SwiftUI applies the removal transition on the visible slot before
+/// swapping activeSlot.
+private struct NavigationRootView<T: NavigationCoordinatable>: View {
+    @ObservedObject var root: NavigationRoot
+    let coordinator: T
+
+    var body: some View {
+        ZStack {
+            slot(0)
+            slot(1)
+        }
+        .onChange(of: root.pendingTransitionId) { id in
+            guard id != nil,
+                  let animation = root.pendingAnimation,
+                  let newItem = root.pendingItem else { return }
+            withAnimation(animation) {
+                root.item = newItem
+                root.activeSlot = root.pendingSlot
+                root.pendingTransitionId = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func slot(_ index: Int) -> some View {
+        if root.activeSlot == index, let item = root.slots[index] {
+            AnyView(coordinator.customize(AnyView(item.child.view())))
+                .zIndex(root.slotZIndex[index])
+                .transition(root.slotTransitions[index])
+        }
+    }
+}
