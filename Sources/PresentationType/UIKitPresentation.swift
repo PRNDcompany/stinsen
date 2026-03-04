@@ -9,7 +9,7 @@ import SwiftUI
 
 
 
-public struct UIKitPresentation<ViewController: UIViewController>: UIKitPresentationType {
+public struct UIKitPresentation<ViewController: UIViewController>: PresentationType {
 
 
     public typealias MakeUIViewControllerHandler = (_ content: AnyView, _ dismissHandler: @escaping () -> Void) -> ViewController

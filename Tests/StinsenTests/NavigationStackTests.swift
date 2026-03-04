@@ -328,4 +328,13 @@ class MockPresentationType: PresentationType {
     ) -> ViewControllerPresented? {
         return nil
     }
+
+    func makeViewController<Content: View>(content: Content) -> UIViewController {
+        return UIHostingController(rootView: content)
+    }
+
+    func presented(parent: UIViewController, content: UIViewController,
+                   onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {}
+
+    func dismissed(viewController: UIViewController) {}
 }

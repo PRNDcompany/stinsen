@@ -1,17 +1,4 @@
-//
-//  UIKitPresentationType.swift
-//  
-//
-//  Created by wani on 2022/04/25.
-//
-
 import SwiftUI
 
-public protocol UIKitPresentationType: PresentationType {
-    func makeViewController<Content: View>(content: Content) -> UIViewController
-    func presented(parent: UIViewController,
-                   content: UIViewController,
-                   onAppeared: @escaping () -> Void,
-                   onDismissed: @escaping () -> Void)
-    func dismissed(viewController: UIViewController)
-}
+@available(*, deprecated, renamed: "PresentationType")
+public typealias UIKitPresentationType = PresentationType

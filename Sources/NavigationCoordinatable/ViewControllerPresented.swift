@@ -6,14 +6,14 @@ public final class ViewControllerPresented {
 
     init(
         viewController: UIViewController? = nil,
-        presentationType: UIKitPresentationType
+        presentationType: PresentationType
     ) {
         self.presentationType = presentationType
         self.strongViewController = viewController
         self.weakViewController = viewController
     }
 
-    var presentationType: UIKitPresentationType
+    var presentationType: PresentationType
 
     var viewController: UIViewController? {
         return weakViewController
