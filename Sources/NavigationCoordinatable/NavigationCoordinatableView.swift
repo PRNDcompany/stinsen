@@ -20,8 +20,19 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 
     @ViewBuilder
     var rootView: some View {
-        if  id == -1 {
-            AnyView(coordinator.customize(AnyView(root.item.child.view())))
+        if id == -1 {
+            ZStack {
+                if root.activeSlot == 0, let slotItem = root.slots[0] {
+                    AnyView(coordinator.customize(AnyView(slotItem.child.view())))
+                        .zIndex(root.slotZIndex[0])
+                        .transition(root.transition)
+                }
+                if root.activeSlot == 1, let slotItem = root.slots[1] {
+                    AnyView(coordinator.customize(AnyView(slotItem.child.view())))
+                        .zIndex(root.slotZIndex[1])
+                        .transition(root.transition)
+                }
+            }
         } else if let start = self.start {
             start
         } else {

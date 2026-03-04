@@ -135,6 +135,52 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertFalse(coordinator.isRoot(\.mainView))
     }
 
+    // MARK: - Animated Root Transition Tests
+
+    func testAnimatedRootSwitchCallsUpdateItem() {
+        // Given
+        let initialRootId = coordinator.stack.root.rootId
+
+        // When — animatedRoot has @Root(.easeInOut, transition: .opacity)
+        coordinator.root(\.animatedRoot)
+
+        // Then — updateItem should have changed rootId
+        XCTAssertNotEqual(coordinator.stack.root.rootId, initialRootId)
+    }
+
+    func testAnimatedRootSwitchUpdatesZIndex() {
+        // Given
+        let initialZIndex = coordinator.stack.root.zIndex
+
+        // When
+        coordinator.root(\.animatedRoot)
+
+        // Then — bringToFront defaults to true → zIndex +1
+        XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex + 1)
+    }
+
+    func testNonAnimatedRootDoesNotChangeRootId() {
+        // Given
+        let initialRootId = coordinator.stack.root.rootId
+
+        // When — alternativeRoot has default @Root (no animation)
+        coordinator.root(\.alternativeRoot)
+
+        // Then — rootId should NOT change (no animation)
+        XCTAssertEqual(coordinator.stack.root.rootId, initialRootId)
+    }
+
+    func testNonAnimatedRootDoesNotChangeZIndex() {
+        // Given
+        let initialZIndex = coordinator.stack.root.zIndex
+
+        // When
+        coordinator.root(\.alternativeRoot)
+
+        // Then
+        XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex)
+    }
+
     // MARK: - Parent-Child Relationship Tests
 
     func testChildCoordinatorHasCorrectParent() {
@@ -215,6 +261,7 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
     @Route(.push) var detailWithInput = makeDetailWithInput
     @Route(.push) var childCoordinator = makeChildCoordinator
     @Root var alternativeRoot = makeAlternativeRoot
+    @Root(.easeInOut, transition: .opacity) var animatedRoot = makeAnimatedRoot
 
     func makeMainView() -> some View {
         Text("Main")
@@ -238,6 +285,10 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
 
     func makeAlternativeRoot() -> some View {
         Text("Alternative Root")
+    }
+
+    func makeAnimatedRoot() -> some View {
+        Text("Animated Root")
     }
 }
 

@@ -702,12 +702,11 @@ public extension NavigationCoordinatable {
         }
 
         let output: Output = _createRouteOutput(route, input: inputItem?.input)
+        let rootSwitch = self[keyPath: route].type
+        let newItem = NavigationRootItem(keyPath: route.hashValue, input: inputItem?.input, child: output)
 
-        stack.root.item = NavigationRootItem(
-            keyPath: route.hashValue,
-            input: inputItem?.input,
-            child: output
-        )
+        stack.root.updateItem(newItem, animation: rootSwitch.animation,
+                              transition: rootSwitch.transition, bringToFront: rootSwitch.bringToFront)
 
         return output
     }
@@ -721,12 +720,11 @@ public extension NavigationCoordinatable {
         }
 
         let output: Output = _createRouteOutput(route, input: inputItem?.input)
+        let rootSwitch = self[keyPath: route].type
+        let newItem = NavigationRootItem(keyPath: route.hashValue, input: inputItem?.input, child: AnyView(output))
 
-        stack.root.item = NavigationRootItem(
-            keyPath: route.hashValue,
-            input: inputItem?.input,
-            child: AnyView(output)
-        )
+        stack.root.updateItem(newItem, animation: rootSwitch.animation,
+                              transition: rootSwitch.transition, bringToFront: rootSwitch.bringToFront)
 
         return self
     }

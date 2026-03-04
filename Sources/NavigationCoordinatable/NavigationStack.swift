@@ -22,9 +22,47 @@ struct NavigationRootItem {
 @MainActor
 public class NavigationRoot: ObservableObject {
     @Published var item: NavigationRootItem
-    
+    @Published var activeSlot: Int = 0
+    @Published var rootId: UUID = UUID()
+
+    // Not @Published: slot content is read during view body evaluation
+    // triggered by activeSlot change. Keeping them non-published avoids
+    // premature re-renders before activeSlot toggles.
+    var slots: [NavigationRootItem?] = [nil, nil]
+    var slotZIndex: [Double] = [0, 0]
+    var transition: AnyTransition = .identity
+    var zIndex: Double = 0
+
     init(item: NavigationRootItem) {
         self.item = item
+        self.slots[0] = item
+    }
+
+    func updateItem(_ newItem: NavigationRootItem, animation: Animation?,
+                    transition: AnyTransition, bringToFront: Bool) {
+        if let animation {
+            // Animated transition: alternate slots
+            self.transition = transition
+            let oldSlot = activeSlot
+            let newSlot = 1 - activeSlot
+
+            slotZIndex[oldSlot] = zIndex
+            zIndex += bringToFront ? 1 : -1
+            slotZIndex[newSlot] = zIndex
+
+            // Store new content in new slot (not @Published, no re-render yet)
+            slots[newSlot] = newItem
+
+            withAnimation(animation) {
+                self.item = newItem        // Keep item in sync for external access
+                self.activeSlot = newSlot  // Triggers view update: old slot removed, new slot inserted
+                self.rootId = UUID()       // Test compatibility
+            }
+        } else {
+            // Non-animated: update current slot content in-place
+            slots[activeSlot] = newItem
+            self.item = newItem
+        }
     }
 }
 

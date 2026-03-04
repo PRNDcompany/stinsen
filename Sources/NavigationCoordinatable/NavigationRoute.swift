@@ -10,7 +10,19 @@ public protocol RouteType {
 }
 
 public struct RootSwitch: RouteType {
+    public var animation: Animation?
+    public var transition: AnyTransition
+    public var bringToFront: Bool
 
+    public init(
+        animation: Animation? = nil,
+        transition: AnyTransition = .identity,
+        bringToFront: Bool = true
+    ) {
+        self.animation = animation
+        self.transition = transition
+        self.bringToFront = bringToFront
+    }
 }
 
 public struct Presentation: RouteType {
@@ -100,6 +112,64 @@ extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatabl
         self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
             return { input in wrappedValue(coordinator)(input) }
         }))
+    }
+}
+
+// MARK: - Animated @Root overloads (e.g. @Root(.easeIn, transition: .opacity) var x = makeX)
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyView, U == RootSwitch {
+    public convenience init<ViewOutput: View>(
+        wrappedValue: @escaping ((T) -> (() -> ViewOutput)),
+        _ animation: Animation?,
+        transition: AnyTransition = .identity,
+        bringToFront: Bool = true
+    ) {
+        self.init(standard: Transition(
+            type: RootSwitch(animation: animation, transition: transition, bringToFront: bringToFront),
+            closure: { coordinator in { _ in AnyView(wrappedValue(coordinator)()) } }
+        ))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U == RootSwitch {
+    public convenience init<ViewOutput: View>(
+        wrappedValue: @escaping ((T) -> ((Input) -> ViewOutput)),
+        _ animation: Animation?,
+        transition: AnyTransition = .identity,
+        bringToFront: Bool = true
+    ) {
+        self.init(standard: Transition(
+            type: RootSwitch(animation: animation, transition: transition, bringToFront: bringToFront),
+            closure: { coordinator in { input in AnyView(wrappedValue(coordinator)(input)) } }
+        ))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output: Coordinatable, U == RootSwitch {
+    public convenience init(
+        wrappedValue: @escaping ((T) -> (() -> Output)),
+        _ animation: Animation?,
+        transition: AnyTransition = .identity,
+        bringToFront: Bool = true
+    ) {
+        self.init(standard: Transition(
+            type: RootSwitch(animation: animation, transition: transition, bringToFront: bringToFront),
+            closure: { coordinator in { _ in wrappedValue(coordinator)() } }
+        ))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == RootSwitch {
+    public convenience init(
+        wrappedValue: @escaping ((T) -> ((Input) -> Output)),
+        _ animation: Animation?,
+        transition: AnyTransition = .identity,
+        bringToFront: Bool = true
+    ) {
+        self.init(standard: Transition(
+            type: RootSwitch(animation: animation, transition: transition, bringToFront: bringToFront),
+            closure: { coordinator in { input in wrappedValue(coordinator)(input) } }
+        ))
     }
 }
 
