@@ -3,52 +3,17 @@ import SwiftUI
 import UIKit
 import Combine
 
-// Wrapper to break retain cycles - holds weak reference to coordinators
-class WeakViewPresentable {
-    private weak var weakCoordinator: (any Coordinatable)?
-    private let strongView: AnyView?
-    
-    init(_ presentable: ViewPresentable) {
-        if let coordinator = presentable as? any Coordinatable {
-            self.weakCoordinator = coordinator
-            self.strongView = nil
-        } else if let view = presentable as? AnyView {
-            self.weakCoordinator = nil
-            self.strongView = view
-        } else {
-            // Should not happen, but handle gracefully
-            self.weakCoordinator = nil
-            self.strongView = nil
-        }
-    }
-    
-    var presentable: ViewPresentable? {
-        if let coordinator = weakCoordinator {
-            return coordinator
-        } else if let view = strongView {
-            return view
-        }
-        return nil
-    }
-}
-
 struct NavigationRootItem {
     let keyPath: Int
     let input: Any?
-    private let childWrapper: WeakViewPresentable
-    
-    var child: ViewPresentable {
-        guard let presentable = childWrapper.presentable else {
-            assertionFailure("NavigationRootItem: coordinator has been deallocated")
-            return AnyView(EmptyView())
-        }
-        return presentable
-    }
-    
+    // Strong reference: root coordinator has no retain cycle
+    // (parent reference is weak, so Coordinator → Stack → Root → child is safe)
+    let child: ViewPresentable
+
     init(keyPath: Int, input: Any?, child: ViewPresentable) {
         self.keyPath = keyPath
         self.input = input
-        self.childWrapper = WeakViewPresentable(child)
+        self.child = child
     }
 }
 
