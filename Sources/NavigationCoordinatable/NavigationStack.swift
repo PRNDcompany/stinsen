@@ -23,15 +23,22 @@ struct NavigationRootItem {
 public class NavigationRoot: ObservableObject {
     @Published var item: NavigationRootItem
     @Published var activeSlot: Int = 0
-    @Published var rootId: UUID = UUID()
+    // Per-slot transitions (@Published so changing them triggers re-render of the
+    // currently-visible slot with the correct transition BEFORE the slot change fires)
+    @Published var slotTransitions: [AnyTransition] = [.identity, .identity]
+    // Deferred animation trigger: UUID ensures onChange fires even on rapid successive calls
+    @Published var pendingTransitionId: UUID? = nil
 
     // Not @Published: slot content is read during view body evaluation
-    // triggered by activeSlot change. Keeping them non-published avoids
-    // premature re-renders before activeSlot toggles.
+    // triggered by activeSlot/pendingTransitionId changes.
     var slots: [NavigationRootItem?] = [nil, nil]
     var slotZIndex: [Double] = [0, 0]
-    var transition: AnyTransition = .identity
     var zIndex: Double = 0
+
+    // Pending state read by view's onChange handler
+    var pendingAnimation: Animation? = nil
+    var pendingSlot: Int = 0
+    var pendingItem: NavigationRootItem? = nil
 
     init(item: NavigationRootItem) {
         self.item = item
@@ -41,8 +48,11 @@ public class NavigationRoot: ObservableObject {
     func updateItem(_ newItem: NavigationRootItem, animation: Animation?,
                     transition: AnyTransition, bringToFront: Bool) {
         if let animation {
-            // Animated transition: alternate slots
-            self.transition = transition
+            // Two-phase animated transition:
+            // Phase 1 (this call): update slotTransitions (@Published) → re-render the
+            //   currently-visible slot with correct transition while it's still on screen.
+            // Phase 2 (onChange in view): withAnimation { activeSlot = newSlot } fires
+            //   after re-render, so SwiftUI uses the freshly-rendered transition for removal.
             let oldSlot = activeSlot
             let newSlot = 1 - activeSlot
 
@@ -50,19 +60,31 @@ public class NavigationRoot: ObservableObject {
             zIndex += bringToFront ? 1 : -1
             slotZIndex[newSlot] = zIndex
 
-            // Store new content in new slot (not @Published, no re-render yet)
             slots[newSlot] = newItem
+            pendingAnimation = animation
+            pendingSlot = newSlot
+            pendingItem = newItem
 
-            withAnimation(animation) {
-                self.item = newItem        // Keep item in sync for external access
-                self.activeSlot = newSlot  // Triggers view update: old slot removed, new slot inserted
-                self.rootId = UUID()       // Test compatibility
-            }
+            // @Published changes: batched into one re-render (Phase 1)
+            slotTransitions[oldSlot] = transition
+            slotTransitions[newSlot] = transition
+            pendingTransitionId = UUID()
         } else {
             // Non-animated: update current slot content in-place
             slots[activeSlot] = newItem
             self.item = newItem
         }
+    }
+
+    /// Commits the pending animated transition.
+    /// In production this is called by the view's onChange handler (with withAnimation).
+    /// In unit tests this is called directly to simulate the view lifecycle.
+    func commitTransition() {
+        guard let newItem = pendingItem else { return }
+        activeSlot = pendingSlot
+        item = newItem
+        pendingTransitionId = nil
+        pendingItem = nil
     }
 }
 

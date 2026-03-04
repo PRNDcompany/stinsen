@@ -138,14 +138,11 @@ final class NavigationCoordinatableTests: XCTestCase {
     // MARK: - Animated Root Transition Tests
 
     func testAnimatedRootSwitchCallsUpdateItem() {
-        // Given
-        let initialRootId = coordinator.stack.root.rootId
-
         // When — animatedRoot has @Root(.easeInOut, transition: .opacity)
         coordinator.root(\.animatedRoot)
 
-        // Then — updateItem should have changed rootId
-        XCTAssertNotEqual(coordinator.stack.root.rootId, initialRootId)
+        // Then — updateItem should have set pendingTransitionId (two-phase animation)
+        XCTAssertNotNil(coordinator.stack.root.pendingTransitionId)
     }
 
     func testAnimatedRootSwitchUpdatesZIndex() {
@@ -159,15 +156,12 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex + 1)
     }
 
-    func testNonAnimatedRootDoesNotChangeRootId() {
-        // Given
-        let initialRootId = coordinator.stack.root.rootId
-
+    func testNonAnimatedRootDoesNotSetPendingTransitionId() {
         // When — alternativeRoot has default @Root (no animation)
         coordinator.root(\.alternativeRoot)
 
-        // Then — rootId should NOT change (no animation)
-        XCTAssertEqual(coordinator.stack.root.rootId, initialRootId)
+        // Then — no pending transition for non-animated root
+        XCTAssertNil(coordinator.stack.root.pendingTransitionId)
     }
 
     func testNonAnimatedRootDoesNotChangeZIndex() {

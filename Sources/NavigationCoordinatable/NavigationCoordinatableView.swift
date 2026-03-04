@@ -25,12 +25,22 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
                 if root.activeSlot == 0, let slotItem = root.slots[0] {
                     AnyView(coordinator.customize(AnyView(slotItem.child.view())))
                         .zIndex(root.slotZIndex[0])
-                        .transition(root.transition)
+                        .transition(root.slotTransitions[0])
                 }
                 if root.activeSlot == 1, let slotItem = root.slots[1] {
                     AnyView(coordinator.customize(AnyView(slotItem.child.view())))
                         .zIndex(root.slotZIndex[1])
-                        .transition(root.transition)
+                        .transition(root.slotTransitions[1])
+                }
+            }
+            .onChange(of: root.pendingTransitionId) { id in
+                guard id != nil,
+                      let animation = root.pendingAnimation,
+                      let newItem = root.pendingItem else { return }
+                withAnimation(animation) {
+                    root.item = newItem
+                    root.activeSlot = root.pendingSlot
+                    root.pendingTransitionId = nil
                 }
             }
         } else if let start = self.start {
