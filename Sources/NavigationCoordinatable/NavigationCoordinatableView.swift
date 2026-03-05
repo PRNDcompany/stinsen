@@ -110,8 +110,11 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
                 withAnimation(animation) {
                     root.item = newItem
                     root.activeSlot = slot
-                    root.pendingTransitionId = nil
                 }
+                // Clear outside withAnimation: setting @Published inside would
+                // trigger a body re-eval mid-animation and cancel the removal transition
+                root.pendingTransitionId = nil
+                root.pendingItem = nil
             }
         }
     }
@@ -122,6 +125,7 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
             AnyView(item.child.view())
                 .zIndex(root.slotZIndex[index])
                 .transition(root.transition)
+
         }
     }
 }
