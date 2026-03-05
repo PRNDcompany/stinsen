@@ -138,8 +138,8 @@ final class NavigationCoordinatableTests: XCTestCase {
     // MARK: - Animated Root Transition Tests
 
     func testAnimatedRootSwitchCallsUpdateItem() {
-        // When — animatedRoot has @Root(.easeInOut, transition: .opacity)
-        coordinator.root(\.animatedRoot)
+        // When — animation passed at call site
+        coordinator.root(\.animatedRoot, animation: .easeInOut, transition: .opacity)
 
         // Then — updateItem should have set pendingTransitionId (two-phase animation)
         XCTAssertNotNil(coordinator.stack.root.pendingTransitionId)
@@ -150,14 +150,14 @@ final class NavigationCoordinatableTests: XCTestCase {
         let initialZIndex = coordinator.stack.root.zIndex
 
         // When
-        coordinator.root(\.animatedRoot)
+        coordinator.root(\.animatedRoot, animation: .easeInOut, transition: .opacity)
 
-        // Then — bringToFront defaults to true → zIndex +1
+        // Then — animated transition → zIndex +1
         XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex + 1)
     }
 
     func testNonAnimatedRootDoesNotSetPendingTransitionId() {
-        // When — alternativeRoot has default @Root (no animation)
+        // When — no animation at call site
         coordinator.root(\.alternativeRoot)
 
         // Then — no pending transition for non-animated root
@@ -255,7 +255,7 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
     @Route(.push) var detailWithInput = makeDetailWithInput
     @Route(.push) var childCoordinator = makeChildCoordinator
     @Root var alternativeRoot = makeAlternativeRoot
-    @Root(.easeInOut, transition: .opacity) var animatedRoot = makeAnimatedRoot
+    @Root var animatedRoot = makeAnimatedRoot
 
     func makeMainView() -> some View {
         Text("Main")

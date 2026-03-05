@@ -23,9 +23,9 @@ struct NavigationRootItem {
 public class NavigationRoot: ObservableObject {
     @Published var item: NavigationRootItem
     @Published var activeSlot: Int = 0
-    // Per-slot transitions (@Published so changing them triggers re-render of the
+    // Unified transition (@Published so changing it triggers re-render of the
     // currently-visible slot with the correct transition BEFORE the slot change fires)
-    @Published var slotTransitions: [AnyTransition] = [.identity, .identity]
+    @Published var transition: AnyTransition = .identity
     // Deferred animation trigger: UUID ensures onChange fires even on rapid successive calls
     @Published var pendingTransitionId: UUID? = nil
 
@@ -46,10 +46,10 @@ public class NavigationRoot: ObservableObject {
     }
 
     func updateItem(_ newItem: NavigationRootItem, animation: Animation?,
-                    transition: AnyTransition, bringToFront: Bool) {
+                    transition: AnyTransition) {
         if let animation {
             // Two-phase animated transition:
-            // Phase 1 (this call): update slotTransitions (@Published) → re-render the
+            // Phase 1 (this call): update transition (@Published) → re-render the
             //   currently-visible slot with correct transition while it's still on screen.
             // Phase 2 (onChange in view): withAnimation { activeSlot = newSlot } fires
             //   after re-render, so SwiftUI uses the freshly-rendered transition for removal.
@@ -57,7 +57,7 @@ public class NavigationRoot: ObservableObject {
             let newSlot = 1 - activeSlot
 
             slotZIndex[oldSlot] = zIndex
-            zIndex += bringToFront ? 1 : -1
+            zIndex += 1
             slotZIndex[newSlot] = zIndex
 
             slots[newSlot] = newItem
@@ -66,8 +66,7 @@ public class NavigationRoot: ObservableObject {
             pendingItem = newItem
 
             // @Published changes: batched into one re-render (Phase 1)
-            slotTransitions[oldSlot] = transition
-            slotTransitions[newSlot] = transition
+            self.transition = transition
             pendingTransitionId = UUID()
         } else {
             // Non-animated: update current slot content in-place

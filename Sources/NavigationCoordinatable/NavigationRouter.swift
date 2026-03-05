@@ -310,14 +310,14 @@ public extension NavigationRouter where T: NavigationCoordinatable {
         _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
         _ input: Input
     ) -> Output {
-        return coordinator.root(route, input)
+        return coordinator.root(route, input, comparator: { $0 == $1 })
     }
-    
+
     @discardableResult func root<Input: Equatable, Output: View>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
         _ input: Input
     ) -> T {
-        return coordinator.root(route, input)
+        return coordinator.root(route, input, comparator: { $0 == $1 })
     }
     
     func isRoot<Output: Coordinatable>(

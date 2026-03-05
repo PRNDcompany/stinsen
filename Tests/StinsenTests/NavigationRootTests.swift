@@ -18,55 +18,37 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
 
         XCTAssertNotNil(root.pendingTransitionId)
     }
 
-    func testUpdateItemWithAnimationSetsSlotTransitions() {
+    func testUpdateItemWithAnimationSetsTransition() {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
 
-        // Both slots have the transition set (can't compare AnyTransition directly,
-        // but verify it doesn't crash and transitions are set)
-        XCTAssertNotNil(root.slotTransitions[0])
-        XCTAssertNotNil(root.slotTransitions[1])
+        // Both slots use the same unified transition (can't compare AnyTransition directly,
+        // but verify it doesn't crash and transition is set)
+        XCTAssertNotNil(root.transition)
     }
 
-    func testZIndexIncrementsOnBringToFront() {
+    func testZIndexIncrementsOnAnimatedTransition() {
         let root = NavigationRoot(item: makeDummyItem())
         let initialZIndex = root.zIndex
 
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
 
         XCTAssertEqual(root.zIndex, initialZIndex + 1)
-    }
-
-    func testZIndexDecrementsOnBringToBack() {
-        let root = NavigationRoot(item: makeDummyItem())
-        let initialZIndex = root.zIndex
-
-        root.updateItem(
-            makeDummyItem(keyPath: 1),
-            animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: false
-        )
-
-        XCTAssertEqual(root.zIndex, initialZIndex - 1)
     }
 
     func testUpdateItemWithoutAnimationDoesNotSetPendingId() {
@@ -75,8 +57,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: nil,
-            transition: .identity,
-            bringToFront: true
+            transition: .identity
         )
 
         XCTAssertNil(root.pendingTransitionId)
@@ -102,8 +83,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
         root.commitTransition()  // Simulate onChange firing
 
@@ -116,8 +96,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 200),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
 
         // Old slot still has A, new slot has B (before commit)
@@ -132,8 +111,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 200),
             animation: nil,
-            transition: .identity,
-            bringToFront: true
+            transition: .identity
         )
 
         // activeSlot should NOT toggle
@@ -146,19 +124,19 @@ final class NavigationRootTests: XCTestCase {
         let root = NavigationRoot(item: makeDummyItem(keyPath: 1))
 
         // A→B: slot 0→1
-        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, bringToFront: true)
+        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity)
         root.commitTransition()
         XCTAssertEqual(root.activeSlot, 1)
         XCTAssertEqual(root.slots[1]?.keyPath, 2)
 
         // B→C: slot 1→0
-        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, bringToFront: true)
+        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity)
         root.commitTransition()
         XCTAssertEqual(root.activeSlot, 0)
         XCTAssertEqual(root.slots[0]?.keyPath, 3)
 
         // C→D: slot 0→1
-        root.updateItem(makeDummyItem(keyPath: 4), animation: .easeIn, transition: .opacity, bringToFront: true)
+        root.updateItem(makeDummyItem(keyPath: 4), animation: .easeIn, transition: .opacity)
         root.commitTransition()
         XCTAssertEqual(root.activeSlot, 1)
         XCTAssertEqual(root.slots[1]?.keyPath, 4)
@@ -170,8 +148,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
 
         // Old slot (0) should have old zIndex (0), new slot (1) should have new zIndex (1)
@@ -179,16 +156,16 @@ final class NavigationRootTests: XCTestCase {
         XCTAssertEqual(root.slotZIndex[1], 1)
     }
 
-    func testMultipleBringToFrontAccumulatesZIndex() {
+    func testMultipleAnimatedTransitionsAccumulateZIndex() {
         let root = NavigationRoot(item: makeDummyItem())
 
-        root.updateItem(makeDummyItem(keyPath: 1), animation: .easeIn, transition: .opacity, bringToFront: true)
+        root.updateItem(makeDummyItem(keyPath: 1), animation: .easeIn, transition: .opacity)
         root.commitTransition()
-        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, bringToFront: true)
+        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity)
         root.commitTransition()
-        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, bringToFront: false)
+        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity)
 
-        XCTAssertEqual(root.zIndex, 1) // +1, +1, -1 = 1
+        XCTAssertEqual(root.zIndex, 3) // +1, +1, +1 = 3
     }
 
     // MARK: - commitTransition
@@ -199,8 +176,7 @@ final class NavigationRootTests: XCTestCase {
         root.updateItem(
             makeDummyItem(keyPath: 1),
             animation: .easeInOut,
-            transition: .opacity,
-            bringToFront: true
+            transition: .opacity
         )
         XCTAssertNotNil(root.pendingTransitionId)
         XCTAssertNotNil(root.pendingItem)

@@ -203,26 +203,26 @@ public protocol NavigationCoordinatable: Coordinatable {
     
     @discardableResult func root<Input, Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input
+    ) -> Output
+
+    @discardableResult func root<Input, Output: View>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input
+    ) -> Self
+
+    @discardableResult func root<Input, Output: Coordinatable>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
         comparator: @escaping (Input, Input) -> Bool
     ) -> Output
-    
+
     @discardableResult func root<Input, Output: View>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
         comparator: @escaping (Input, Input) -> Bool
     ) -> Self
-    
-    @discardableResult func root<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        _ input: Input
-    ) -> Output
-    
-    @discardableResult func root<Input: Equatable, Output: View>(
-        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        _ input: Input
-    ) -> Self
-    
+
     func isRoot<Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>
     ) -> Bool
@@ -695,37 +695,25 @@ public extension NavigationCoordinatable {
     
     @discardableResult private func _root<Output: Coordinatable, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
+        inputItem: (input: Input, comparator: (Input, Input) -> Bool)?,
+        animation: Animation? = nil,
+        transition: AnyTransition = .identity
     ) -> Output {
-        if _isRoot(route, inputItem: inputItem) {
-            return stack.root.item.child as! Output
-        }
-
         let output: Output = _createRouteOutput(route, input: inputItem?.input)
-        let rootSwitch = self[keyPath: route].type
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: inputItem?.input, child: output)
-
-        stack.root.updateItem(newItem, animation: rootSwitch.animation,
-                              transition: rootSwitch.transition, bringToFront: rootSwitch.bringToFront)
-
+        stack.root.updateItem(newItem, animation: animation, transition: transition)
         return output
     }
 
     @discardableResult private func _root<Output: View, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        inputItem: (input: Input, comparator: (Input, Input) -> Bool)?
+        inputItem: (input: Input, comparator: (Input, Input) -> Bool)?,
+        animation: Animation? = nil,
+        transition: AnyTransition = .identity
     ) -> Self {
-        if _isRoot(route, inputItem: inputItem) {
-            return self
-        }
-
         let output: Output = _createRouteOutput(route, input: inputItem?.input)
-        let rootSwitch = self[keyPath: route].type
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: inputItem?.input, child: AnyView(output))
-
-        stack.root.updateItem(newItem, animation: rootSwitch.animation,
-                              transition: rootSwitch.transition, bringToFront: rootSwitch.bringToFront)
-
+        stack.root.updateItem(newItem, animation: animation, transition: transition)
         return self
     }
 
@@ -767,12 +755,26 @@ public extension NavigationCoordinatable {
     
     @discardableResult func root<Input, Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input
+    ) -> Output {
+        self._root(route, inputItem: (input, { _, _ in false }))
+    }
+
+    @discardableResult func root<Input, Output: View>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input
+    ) -> Self {
+        self._root(route, inputItem: (input, { _, _ in false }))
+    }
+
+    @discardableResult func root<Input, Output: Coordinatable>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
         comparator: @escaping (Input, Input) -> Bool
     ) -> Output {
         self._root(route, inputItem: (input, comparator))
     }
-    
+
     @discardableResult func root<Input, Output: View>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
@@ -780,19 +782,41 @@ public extension NavigationCoordinatable {
     ) -> Self {
         self._root(route, inputItem: (input, comparator))
     }
-    
-    @discardableResult func root<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        _ input: Input
+
+    // MARK: - Animation overloads (call-site animation, default params not allowed in protocol)
+
+    @discardableResult func root<Output: Coordinatable>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>,
+        animation: Animation?,
+        transition: AnyTransition = .identity
     ) -> Output {
-        self._root(route, inputItem: (input, { $0 == $1 }))
+        self._root(route, inputItem: nil, animation: animation, transition: transition)
     }
-    
-    @discardableResult func root<Input: Equatable, Output: View>(
-        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
-        _ input: Input
+
+    @discardableResult func root<Output: View>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>,
+        animation: Animation?,
+        transition: AnyTransition = .identity
     ) -> Self {
-        self._root(route, inputItem: (input, { $0 == $1 }))
+        self._root(route, inputItem: nil, animation: animation, transition: transition)
+    }
+
+    @discardableResult func root<Input, Output: Coordinatable>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input,
+        animation: Animation?,
+        transition: AnyTransition = .identity
+    ) -> Output {
+        self._root(route, inputItem: (input, { _, _ in false }), animation: animation, transition: transition)
+    }
+
+    @discardableResult func root<Input, Output: View>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
+        _ input: Input,
+        animation: Animation?,
+        transition: AnyTransition = .identity
+    ) -> Self {
+        self._root(route, inputItem: (input, { _, _ in false }), animation: animation, transition: transition)
     }
     
     private func _isRoot<Input, Output: ViewPresentable>(

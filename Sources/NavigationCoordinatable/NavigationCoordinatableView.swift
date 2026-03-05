@@ -21,7 +21,13 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     @ViewBuilder
     var rootView: some View {
         if id == -1 {
-            NavigationRootView(root: root, coordinator: coordinator)
+            coordinator
+                .customize(AnyView(
+                    NavigationRootView(
+                        root: root,
+                        coordinator: coordinator
+                    )
+                ))
         } else if let start = self.start {
             start
         } else {
@@ -99,10 +105,13 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
             guard id != nil,
                   let animation = root.pendingAnimation,
                   let newItem = root.pendingItem else { return }
-            withAnimation(animation) {
-                root.item = newItem
-                root.activeSlot = root.pendingSlot
-                root.pendingTransitionId = nil
+            let slot = root.pendingSlot
+            DispatchQueue.main.async {
+                withAnimation(animation) {
+                    root.item = newItem
+                    root.activeSlot = slot
+                    root.pendingTransitionId = nil
+                }
             }
         }
     }
@@ -110,9 +119,9 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
     @ViewBuilder
     private func slot(_ index: Int) -> some View {
         if root.activeSlot == index, let item = root.slots[index] {
-            AnyView(coordinator.customize(AnyView(item.child.view())))
+            AnyView(item.child.view())
                 .zIndex(root.slotZIndex[index])
-                .transition(root.slotTransitions[index])
+                .transition(root.transition)
         }
     }
 }
