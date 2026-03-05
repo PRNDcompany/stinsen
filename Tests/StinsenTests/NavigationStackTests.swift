@@ -277,7 +277,7 @@ final class NavigationStackTests: XCTestCase {
             input: nil,
             child: coordinator
         )
-        root.item = item2
+        root.updateItem(item2, animation: .easeInOut, transition: .identity, zOrder: .front)
 
         // Then
         wait(for: [expectation], timeout: 1.0)

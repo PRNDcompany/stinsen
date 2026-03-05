@@ -98,23 +98,16 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
 
     var body: some View {
         ZStack {
-            slot(root.activeSlot)
+            slotView
         }
-        .onChange(of: root.pendingSlot) { id in
-            root.activeSlot = id ?? 0
-        }
-        .animation(root.pendingAnimation, value: root.activeSlot)
     }
 
     @ViewBuilder
-    private func slot(_ index: Int) -> some View {
-        let _ = print("wani.root.slotTransitions[index]", root.slotTransitions[index])
-        
-        if let item = root.slots[index] {
-            AnyView(item.child.view())
-                .zIndex(root.slotZIndex[index])
-                .transition(root.slotTransitions[index])
+    var slotView: some View {
+        if let slot = root.activeSlot {
+            slot.item.child.view()
+                .zIndex(slot.zIndex)
+                .transition(slot.transition)
         }
     }
-
 }

@@ -17,24 +17,28 @@ struct NavigationRootItem {
     }
 }
 
+struct RootSlot {
+    var item: NavigationRootItem
+    var transition: AnyTransition = .identity
+    var zIndex: Double = 0
+}
+
 /// Wrapper around childCoordinators
 /// Used so that you don't need to write @Published
 @MainActor
 public class NavigationRoot: ObservableObject {
-    @Published var item: NavigationRootItem
-    @Published var activeSlot: Int = 0
-    @Published var pendingSlot: Int? = nil  // Int? — onChange fires even if same slot value
+    var activeSlotIndex: Int = 0
 
-    var slotTransitions: [AnyTransition] = [.identity, .identity]
-    var slots: [NavigationRootItem?] = [nil, nil]
-    var slotZIndex: [Double] = [0, 0]
+    var activeSlot: RootSlot? {
+        slots[safe: activeSlotIndex]
+    }
+
+    var slots: [RootSlot]
     var zIndex: Double = 0
-    var pendingAnimation: Animation? = nil
 
     init(item: NavigationRootItem, transition: AnyTransition = .identity) {
-        self.item = item
-        self.slots[0] = item
-        self.slotTransitions[0] = transition
+        let slot = RootSlot(item: item, transition: transition, zIndex: zIndex)
+        self.slots = [slot]
     }
 
     func updateItem(
@@ -44,39 +48,33 @@ public class NavigationRoot: ObservableObject {
         zOrder: RootLayer
     ) {
         if let animation {
-            let oldSlot = activeSlot
-            let newSlot = 1 - activeSlot
-
-            switch zOrder {
-            case .front:
-                slotZIndex[oldSlot] = zIndex
-                zIndex += 1
-                slotZIndex[newSlot] = zIndex
-            case .back:
-                slotZIndex[newSlot] = zIndex
-                zIndex += 1
-                slotZIndex[oldSlot] = zIndex
+            withAnimation(animation) {
+                activeSlotIndex = prepareSlotIndex(for: newItem, transition: transition, zOrder: zOrder)
+                objectWillChange.send()
             }
-
-            slots[newSlot] = newItem
-            pendingAnimation = animation
-            slotTransitions[newSlot] = transition
-            pendingSlot = newSlot
         } else {
-            slots[activeSlot] = newItem
-            slotTransitions[activeSlot] = transition // 내가 추가
-            self.item = newItem
+            slots[activeSlotIndex] = RootSlot(item: newItem, transition: transition, zIndex: zIndex)
+            objectWillChange.send()
         }
     }
 
-    /// Commits the pending animated transition.
-    /// In production this is called by the view's onChange handler.
-    /// In unit tests this is called directly to simulate the view lifecycle.
-    func commitTransition() {
-        guard let slot = pendingSlot else { return }
-        activeSlot = slot
-        if let newItem = slots[slot] { item = newItem }
-        pendingSlot = nil
+    private func prepareSlotIndex(for item: NavigationRootItem, transition: AnyTransition, zOrder: RootLayer) -> Int {
+        let slotIndex = 1 - activeSlotIndex
+        zIndex += zOrder == .front ? 1 : -1
+        setSlot(
+            at: slotIndex,
+            RootSlot(item: item, transition: transition, zIndex: zIndex)
+        )
+        return slotIndex
+    }
+
+
+    private func setSlot(at index: Int, _ slot: RootSlot) {
+        if index < slots.count {
+            slots[index] = slot
+        } else {
+            slots.append(slot)
+        }
     }
 }
 

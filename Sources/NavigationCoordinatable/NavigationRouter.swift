@@ -304,84 +304,84 @@ public extension NavigationRouter where T: NavigationCoordinatable {
         return coordinator.root(route, input)
     }
 
-    func isRoot<Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
-    ) -> Bool {
-        return coordinator.isRoot(route)
-    }
-    
-    func isRoot<Output: View>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
-    ) -> Bool {
-        return coordinator.isRoot(route)
-    }
-
-    func isRoot<Input, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
-    ) -> Bool {
-        return coordinator.isRoot(route)
-    }
-
-    func isRoot<Input, Output: View>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
-    ) -> Bool {
-        return coordinator.isRoot(route)
-    }
-
-    func isRoot<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input
-    ) -> Bool {
-        return coordinator.isRoot(route, input)
-    }
-
-    func isRoot<Input: Equatable, Output: View>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input
-    ) -> Bool {
-        return coordinator.isRoot(route, input)
-    }
-
-    func isRoot<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input,
-        comparator: @escaping (Input, Input) -> Bool
-    ) -> Bool {
-        return coordinator.isRoot(route, input, comparator: comparator)
-    }
-
-    func isRoot<Input: Equatable, Output: View>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input,
-        comparator: @escaping (Input, Input) -> Bool
-    ) -> Bool {
-        return coordinator.isRoot(route, input, comparator: comparator)
-    }
-    
-    @discardableResult func hasRoot<Input, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
-    ) -> Output? {
-        return coordinator.hasRoot(route)
-    }
-    
-    @discardableResult func hasRoot<Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
-    ) -> Output? {
-        return coordinator.hasRoot(route)
-    }
-    
-    @discardableResult func hasRoot<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input
-    ) -> Output? {
-        return coordinator.hasRoot(route, input)
-    }
-    
-    @discardableResult func hasRoot<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input,
-        comparator: @escaping (Input, Input) -> Bool
-    ) -> Output? {
-        return coordinator.hasRoot(route, input, comparator: comparator)
-    }
+//    func isRoot<Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
+//    ) -> Bool {
+//        return coordinator.isRoot(route)
+//    }
+//    
+//    func isRoot<Output: View>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
+//    ) -> Bool {
+//        return coordinator.isRoot(route)
+//    }
+//
+//    func isRoot<Input, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
+//    ) -> Bool {
+//        return coordinator.isRoot(route)
+//    }
+//
+//    func isRoot<Input, Output: View>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
+//    ) -> Bool {
+//        return coordinator.isRoot(route)
+//    }
+//
+//    func isRoot<Input: Equatable, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input
+//    ) -> Bool {
+//        return coordinator.isRoot(route, input)
+//    }
+//
+//    func isRoot<Input: Equatable, Output: View>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input
+//    ) -> Bool {
+//        return coordinator.isRoot(route, input)
+//    }
+//
+//    func isRoot<Input: Equatable, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input,
+//        comparator: @escaping (Input, Input) -> Bool
+//    ) -> Bool {
+//        return coordinator.isRoot(route, input, comparator: comparator)
+//    }
+//
+//    func isRoot<Input: Equatable, Output: View>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input,
+//        comparator: @escaping (Input, Input) -> Bool
+//    ) -> Bool {
+//        return coordinator.isRoot(route, input, comparator: comparator)
+//    }
+//    
+//    @discardableResult func hasRoot<Input, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
+//    ) -> Output? {
+//        return coordinator.hasRoot(route)
+//    }
+//    
+//    @discardableResult func hasRoot<Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
+//    ) -> Output? {
+//        return coordinator.hasRoot(route)
+//    }
+//    
+//    @discardableResult func hasRoot<Input: Equatable, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input
+//    ) -> Output? {
+//        return coordinator.hasRoot(route, input)
+//    }
+//    
+//    @discardableResult func hasRoot<Input: Equatable, Output: Coordinatable>(
+//        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
+//        _ input: Input,
+//        comparator: @escaping (Input, Input) -> Bool
+//    ) -> Output? {
+//        return coordinator.hasRoot(route, input, comparator: comparator)
+//    }
 }

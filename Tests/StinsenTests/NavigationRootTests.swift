@@ -9,11 +9,11 @@ final class NavigationRootTests: XCTestCase {
         NavigationRootItem(keyPath: keyPath, input: nil, child: AnyView(EmptyView()))
     }
 
-    // MARK: - updateItem with animation (pending state)
+    // MARK: - updateItem with animation
 
-    func testUpdateItemWithAnimationSetsPendingSlot() {
+    func testUpdateItemWithAnimationChangesActiveSlot() {
         let root = NavigationRoot(item: makeDummyItem())
-        XCTAssertNil(root.pendingSlot)
+        XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
             makeDummyItem(keyPath: 1),
@@ -22,11 +22,12 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .front
         )
 
-        XCTAssertNotNil(root.pendingSlot)
+        XCTAssertEqual(root.activeSlotIndex, 1)
     }
 
-    func testUpdateItemWithAnimationSetsTransition() {
+    func testUpdateItemWithAnimationAddsSecondSlot() {
         let root = NavigationRoot(item: makeDummyItem())
+        XCTAssertEqual(root.slots.count, 1)
 
         root.updateItem(
             makeDummyItem(keyPath: 1),
@@ -35,8 +36,7 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .front
         )
 
-        // Can't compare AnyTransition directly; verify slot 1 (new slot) has transition set
-        XCTAssertNotNil(root.slotTransitions[1])
+        XCTAssertEqual(root.slots.count, 2)
     }
 
     func testZIndexIncrementsOnAnimatedTransition() {
@@ -53,7 +53,7 @@ final class NavigationRootTests: XCTestCase {
         XCTAssertEqual(root.zIndex, initialZIndex + 1)
     }
 
-    func testUpdateItemWithoutAnimationDoesNotSetPendingSlot() {
+    func testUpdateItemWithoutAnimationDoesNotChangeActiveSlot() {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(
@@ -63,25 +63,25 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .front
         )
 
-        XCTAssertNil(root.pendingSlot)
+        XCTAssertEqual(root.activeSlotIndex, 0)
     }
 
     // MARK: - Two-Slot behavior
 
-    func testInitialActiveSlotIsZero() {
+    func testInitialActiveSlotIndexIsZero() {
         let root = NavigationRoot(item: makeDummyItem())
-        XCTAssertEqual(root.activeSlot, 0)
+        XCTAssertEqual(root.activeSlotIndex, 0)
     }
 
     func testInitialSlotZeroHasItem() {
         let root = NavigationRoot(item: makeDummyItem(keyPath: 42))
-        XCTAssertNotNil(root.slots[0])
-        XCTAssertEqual(root.slots[0]?.keyPath, 42)
+        XCTAssertNotNil(root.slots[0].item)
+        XCTAssertEqual(root.slots[0].item.keyPath, 42)
     }
 
     func testActiveSlotTogglesOnAnimatedTransition() {
         let root = NavigationRoot(item: makeDummyItem())
-        XCTAssertEqual(root.activeSlot, 0)
+        XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
             makeDummyItem(keyPath: 1),
@@ -89,9 +89,8 @@ final class NavigationRootTests: XCTestCase {
             transition: .opacity,
             zOrder: .front
         )
-        root.commitTransition()  // Simulate onChange firing
 
-        XCTAssertEqual(root.activeSlot, 1)
+        XCTAssertEqual(root.activeSlotIndex, 1)
     }
 
     func testSlotsPreserveContentDuringTransition() {
@@ -104,14 +103,14 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .front
         )
 
-        // Old slot still has A, new slot has B (before commit)
-        XCTAssertEqual(root.slots[0]?.keyPath, 100)
-        XCTAssertEqual(root.slots[1]?.keyPath, 200)
+        // Old slot still has A, new slot has B
+        XCTAssertEqual(root.slots[0].item.keyPath, 100)
+        XCTAssertEqual(root.slots[1].item.keyPath, 200)
     }
 
     func testNonAnimatedTransitionUpdatesSameSlot() {
         let root = NavigationRoot(item: makeDummyItem(keyPath: 100))
-        XCTAssertEqual(root.activeSlot, 0)
+        XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
             makeDummyItem(keyPath: 200),
@@ -120,10 +119,10 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .front
         )
 
-        // activeSlot should NOT toggle
-        XCTAssertEqual(root.activeSlot, 0)
+        // activeSlotIndex should NOT toggle
+        XCTAssertEqual(root.activeSlotIndex, 0)
         // Current slot updated in-place
-        XCTAssertEqual(root.slots[0]?.keyPath, 200)
+        XCTAssertEqual(root.slots[0].item.keyPath, 200)
     }
 
     func testAlternatingSlotTransitions() {
@@ -131,21 +130,18 @@ final class NavigationRootTests: XCTestCase {
 
         // A→B: slot 0→1
         root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.commitTransition()
-        XCTAssertEqual(root.activeSlot, 1)
-        XCTAssertEqual(root.slots[1]?.keyPath, 2)
+        XCTAssertEqual(root.activeSlotIndex, 1)
+        XCTAssertEqual(root.slots[1].item.keyPath, 2)
 
         // B→C: slot 1→0
         root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.commitTransition()
-        XCTAssertEqual(root.activeSlot, 0)
-        XCTAssertEqual(root.slots[0]?.keyPath, 3)
+        XCTAssertEqual(root.activeSlotIndex, 0)
+        XCTAssertEqual(root.slots[0].item.keyPath, 3)
 
         // C→D: slot 0→1
         root.updateItem(makeDummyItem(keyPath: 4), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.commitTransition()
-        XCTAssertEqual(root.activeSlot, 1)
-        XCTAssertEqual(root.slots[1]?.keyPath, 4)
+        XCTAssertEqual(root.activeSlotIndex, 1)
+        XCTAssertEqual(root.slots[1].item.keyPath, 4)
     }
 
     // MARK: - zOrder
@@ -161,8 +157,8 @@ final class NavigationRootTests: XCTestCase {
         )
 
         // .front: new slot (1) gets higher zIndex (comes to front)
-        XCTAssertEqual(root.slotZIndex[0], 0)  // old slot: lower
-        XCTAssertEqual(root.slotZIndex[1], 1)  // new slot: higher (front)
+        XCTAssertEqual(root.slots[0].zIndex, 0)  // old slot: unchanged
+        XCTAssertEqual(root.slots[1].zIndex, 1)  // new slot: higher (front)
     }
 
     func testSlotZIndexBack() {
@@ -175,38 +171,18 @@ final class NavigationRootTests: XCTestCase {
             zOrder: .back
         )
 
-        // .back: old slot (0) gets higher zIndex (stays on top)
-        XCTAssertEqual(root.slotZIndex[1], 0)  // new slot: lower (behind)
-        XCTAssertEqual(root.slotZIndex[0], 1)  // old slot: higher (stays in front)
+        // .back: new slot gets lower zIndex (goes behind old slot)
+        XCTAssertEqual(root.slots[1].zIndex, -1)  // new slot: lower (behind)
+        XCTAssertEqual(root.slots[0].zIndex, 0)   // old slot: unchanged (stays in front)
     }
 
     func testMultipleAnimatedTransitionsAccumulateZIndex() {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(makeDummyItem(keyPath: 1), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.commitTransition()
         root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.commitTransition()
         root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, zOrder: .front)
 
         XCTAssertEqual(root.zIndex, 3) // +1, +1, +1 = 3
-    }
-
-    // MARK: - commitTransition
-
-    func testCommitTransitionClearsPendingSlot() {
-        let root = NavigationRoot(item: makeDummyItem())
-
-        root.updateItem(
-            makeDummyItem(keyPath: 1),
-            animation: .easeInOut,
-            transition: .opacity,
-            zOrder: .front
-        )
-        XCTAssertNotNil(root.pendingSlot)
-
-        root.commitTransition()
-
-        XCTAssertNil(root.pendingSlot)
     }
 }

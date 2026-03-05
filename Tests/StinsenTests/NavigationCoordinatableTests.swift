@@ -117,32 +117,27 @@ final class NavigationCoordinatableTests: XCTestCase {
 
     func testRootSwitchesRootView() {
         // Given
-        let initialKeyPath = coordinator.stack.root.item.keyPath
+        let root = coordinator.stack.root!
+        let initialKeyPath = root.slots[root.activeSlotIndex].item.keyPath
 
         // When
         coordinator.root(\.alternativeRoot)
 
         // Then
-        XCTAssertNotEqual(coordinator.stack.root.item.keyPath, initialKeyPath)
-    }
-
-    func testIsRootReturnsTrueForCurrentRoot() {
-        // Given
-        coordinator.root(\.alternativeRoot)
-
-        // Then
-        XCTAssertTrue(coordinator.isRoot(\.alternativeRoot))
-        XCTAssertFalse(coordinator.isRoot(\.mainView))
+        XCTAssertNotEqual(root.slots[root.activeSlotIndex].item.keyPath, initialKeyPath)
     }
 
     // MARK: - Animated Root Transition Tests
 
-    func testAnimatedRootSwitchSetsPendingSlot() {
+    func testAnimatedRootSwitchChangesActiveSlot() {
+        // Given
+        let initialSlot = coordinator.stack.root.activeSlotIndex
+
         // When — animation passed at call site
         coordinator.root(\.animatedRoot, animation: .easeInOut)
 
-        // Then — updateItem should have set pendingSlot (two-phase animation)
-        XCTAssertNotNil(coordinator.stack.root.pendingSlot)
+        // Then — animated transition → activeSlotIndex toggled
+        XCTAssertNotEqual(coordinator.stack.root.activeSlotIndex, initialSlot)
     }
 
     func testAnimatedRootSwitchUpdatesZIndex() {
@@ -156,12 +151,12 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex + 1)
     }
 
-    func testNonAnimatedRootDoesNotSetPendingSlot() {
+    func testNonAnimatedRootDoesNotChangeActiveSlot() {
         // When — no animation at call site
         coordinator.root(\.alternativeRoot)
 
-        // Then — no pending transition for non-animated root
-        XCTAssertNil(coordinator.stack.root.pendingSlot)
+        // Then — non-animated root → activeSlotIndex stays 0
+        XCTAssertEqual(coordinator.stack.root.activeSlotIndex, 0)
     }
 
     func testNonAnimatedRootDoesNotChangeZIndex() {
