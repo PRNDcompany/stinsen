@@ -137,12 +137,12 @@ final class NavigationCoordinatableTests: XCTestCase {
 
     // MARK: - Animated Root Transition Tests
 
-    func testAnimatedRootSwitchCallsUpdateItem() {
+    func testAnimatedRootSwitchSetsPendingSlot() {
         // When — animation passed at call site
-        coordinator.root(\.animatedRoot, animation: .easeInOut, transition: .opacity)
+        coordinator.root(\.animatedRoot, animation: .easeInOut)
 
-        // Then — updateItem should have set pendingTransitionId (two-phase animation)
-        XCTAssertNotNil(coordinator.stack.root.pendingTransitionId)
+        // Then — updateItem should have set pendingSlot (two-phase animation)
+        XCTAssertNotNil(coordinator.stack.root.pendingSlot)
     }
 
     func testAnimatedRootSwitchUpdatesZIndex() {
@@ -150,18 +150,18 @@ final class NavigationCoordinatableTests: XCTestCase {
         let initialZIndex = coordinator.stack.root.zIndex
 
         // When
-        coordinator.root(\.animatedRoot, animation: .easeInOut, transition: .opacity)
+        coordinator.root(\.animatedRoot, animation: .easeInOut)
 
         // Then — animated transition → zIndex +1
         XCTAssertEqual(coordinator.stack.root.zIndex, initialZIndex + 1)
     }
 
-    func testNonAnimatedRootDoesNotSetPendingTransitionId() {
+    func testNonAnimatedRootDoesNotSetPendingSlot() {
         // When — no animation at call site
         coordinator.root(\.alternativeRoot)
 
         // Then — no pending transition for non-animated root
-        XCTAssertNil(coordinator.stack.root.pendingTransitionId)
+        XCTAssertNil(coordinator.stack.root.pendingSlot)
     }
 
     func testNonAnimatedRootDoesNotChangeZIndex() {

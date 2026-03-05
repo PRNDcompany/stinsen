@@ -5,12 +5,27 @@ protocol NavigationOutputable {
     func using(coordinator: Any, input: Any) -> ViewPresentable
 }
 
+protocol NavigationRootOutputable: NavigationOutputable {
+    var routeTransition: AnyTransition { get }
+}
+
 public protocol RouteType {
     
 }
 
+public enum RootLayer {
+    case front  // 새 뷰가 앞에 (높은 zIndex)
+    case back   // 새 뷰가 뒤에 (낮은 zIndex, 이전 뷰가 위)
+}
+
 public struct RootSwitch: RouteType {
-    public init() {}
+    var transition: AnyTransition
+    var zOrder: RootLayer
+
+    public init(_ transition: AnyTransition = .identity, zOrder: RootLayer = .front) {
+        self.transition = transition
+        self.zOrder = zOrder
+    }
 }
 
 public struct Presentation: RouteType {
@@ -20,7 +35,7 @@ public struct Presentation: RouteType {
 public struct Transition<T: NavigationCoordinatable, U: RouteType, Input, Output: ViewPresentable>: NavigationOutputable {
     let type: U
     let closure: ((T) -> ((Input) -> Output))
-    
+
     func using(coordinator: Any, input: Any) -> ViewPresentable {
         if Input.self == Void.self {
             return closure(coordinator as! T)(() as! Input)
@@ -28,6 +43,10 @@ public struct Transition<T: NavigationCoordinatable, U: RouteType, Input, Output
             return closure(coordinator as! T)(input as! Input)
         }
     }
+}
+
+extension Transition: NavigationRootOutputable where U == RootSwitch {
+    var routeTransition: AnyTransition { type.transition }
 }
 
 @propertyWrapper public class NavigationRoute<T: NavigationCoordinatable, U: RouteType, Input, Output: ViewPresentable> {
@@ -77,11 +96,23 @@ extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Outp
             return { _ in AnyView(wrappedValue(coordinator)()) }
         }))
     }
+
+    public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> (() -> ViewOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
+            return { _ in AnyView(wrappedValue(coordinator)()) }
+        }))
+    }
 }
 
 extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U == RootSwitch {
     public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> ((Input) -> ViewOutput))) {
         self.init(standard: Transition(type: RootSwitch() , closure: { coordinator in
+            return { input in AnyView(wrappedValue(coordinator)(input)) }
+        }))
+    }
+
+    public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> ((Input) -> ViewOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
             return { input in AnyView(wrappedValue(coordinator)(input)) }
         }))
     }
@@ -93,11 +124,23 @@ extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Outp
             return { _ in wrappedValue(coordinator)() }
         }))
     }
+
+    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
+            return { _ in wrappedValue(coordinator)() }
+        }))
+    }
 }
 
 extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == RootSwitch {
     public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output))) {
         self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
+            return { input in wrappedValue(coordinator)(input) }
+        }))
+    }
+
+    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
             return { input in wrappedValue(coordinator)(input) }
         }))
     }

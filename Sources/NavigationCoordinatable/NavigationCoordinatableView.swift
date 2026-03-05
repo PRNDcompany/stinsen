@@ -98,34 +98,23 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
 
     var body: some View {
         ZStack {
-            slot(0)
-            slot(1)
+            slot(root.activeSlot)
         }
-        .onChange(of: root.pendingTransitionId) { id in
-            guard id != nil,
-                  let animation = root.pendingAnimation,
-                  let newItem = root.pendingItem else { return }
-            let slot = root.pendingSlot
-            DispatchQueue.main.async {
-                withAnimation(animation) {
-                    root.item = newItem
-                    root.activeSlot = slot
-                }
-                // Clear outside withAnimation: setting @Published inside would
-                // trigger a body re-eval mid-animation and cancel the removal transition
-                root.pendingTransitionId = nil
-                root.pendingItem = nil
-            }
+        .onChange(of: root.pendingSlot) { id in
+            root.activeSlot = id ?? 0
         }
+        .animation(root.pendingAnimation, value: root.activeSlot)
     }
 
     @ViewBuilder
     private func slot(_ index: Int) -> some View {
-        if root.activeSlot == index, let item = root.slots[index] {
+        let _ = print("wani.root.slotTransitions[index]", root.slotTransitions[index])
+        
+        if let item = root.slots[index] {
             AnyView(item.child.view())
                 .zIndex(root.slotZIndex[index])
-                .transition(root.transition)
-
+                .transition(root.slotTransitions[index])
         }
     }
+
 }

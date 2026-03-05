@@ -368,16 +368,17 @@ public extension NavigationCoordinatable {
     }
     
     internal func setupRoot() {
-        let a = self[keyPath: self.stack.initial] as! NavigationOutputable
-        let presentable = a.using(coordinator: self, input: self.stack.initialInput as Any)
-        
+        let initial = self[keyPath: self.stack.initial] as! NavigationOutputable
+        let presentable = initial.using(coordinator: self, input: self.stack.initialInput as Any)
+
         let item = NavigationRootItem(
             keyPath: self.stack.initial.hashValue,
             input: self.stack.initialInput,
             child: presentable
         )
         
-        self.stack.root = NavigationRoot(item: item)
+        let transition = (initial as? NavigationRootOutputable)?.routeTransition
+        self.stack.root = NavigationRoot(item: item, transition: transition ?? .identity)
     }
     
     /// Called when a view controller appears. Intentionally a no-op;
@@ -684,24 +685,24 @@ public extension NavigationCoordinatable {
     @discardableResult private func _root<Output: Coordinatable, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         input: Input? = nil,
-        animation: Animation? = nil,
-        transition: AnyTransition = .identity
+        animation: Animation? = nil
     ) -> Output {
         let output: Output = _createRouteOutput(route, input: input)
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: output)
-        stack.root.updateItem(newItem, animation: animation, transition: transition)
+        let rootSwitch = self[keyPath: route].type
+        stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return output
     }
 
     @discardableResult private func _root<Output: View, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         input: Input? = nil,
-        animation: Animation? = nil,
-        transition: AnyTransition = .identity
+        animation: Animation? = nil
     ) -> Self {
         let output: Output = _createRouteOutput(route, input: input)
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: AnyView(output))
-        stack.root.updateItem(newItem, animation: animation, transition: transition)
+        let rootSwitch = self[keyPath: route].type
+        stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return self
     }
 
@@ -759,36 +760,32 @@ public extension NavigationCoordinatable {
 
     @discardableResult func root<Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>,
-        animation: Animation?,
-        transition: AnyTransition = .identity
+        animation: Animation?
     ) -> Output {
-        self._root(route, animation: animation, transition: transition)
+        self._root(route, animation: animation)
     }
 
     @discardableResult func root<Output: View>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>,
-        animation: Animation?,
-        transition: AnyTransition = .identity
+        animation: Animation?
     ) -> Self {
-        self._root(route, animation: animation, transition: transition)
+        self._root(route, animation: animation)
     }
 
     @discardableResult func root<Input, Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
-        animation: Animation?,
-        transition: AnyTransition = .identity
+        animation: Animation?
     ) -> Output {
-        self._root(route, input: input, animation: animation, transition: transition)
+        self._root(route, input: input, animation: animation)
     }
 
     @discardableResult func root<Input, Output: View>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         _ input: Input,
-        animation: Animation?,
-        transition: AnyTransition = .identity
+        animation: Animation?
     ) -> Self {
-        self._root(route, input: input, animation: animation, transition: transition)
+        self._root(route, input: input, animation: animation)
     }
     
     private func _isRoot<Input, Output: ViewPresentable>(
