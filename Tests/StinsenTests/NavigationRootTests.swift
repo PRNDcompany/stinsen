@@ -151,9 +151,9 @@ final class NavigationRootTests: XCTestCase {
             transition: .opacity
         )
 
-        // Old slot (0) should have old zIndex (0), new slot (1) should have new zIndex (1)
-        XCTAssertEqual(root.slotZIndex[0], 0)
-        XCTAssertEqual(root.slotZIndex[1], 1)
+        // New slot (1) gets lower zIndex; old slot (0) stays on top (higher zIndex)
+        XCTAssertEqual(root.slotZIndex[1], 0)
+        XCTAssertEqual(root.slotZIndex[0], 1)
     }
 
     func testMultipleAnimatedTransitionsAccumulateZIndex() {

@@ -56,9 +56,9 @@ public class NavigationRoot: ObservableObject {
             let oldSlot = activeSlot
             let newSlot = 1 - activeSlot
 
-            slotZIndex[oldSlot] = zIndex
-            zIndex += 1
             slotZIndex[newSlot] = zIndex
+            zIndex += 1
+            slotZIndex[oldSlot] = zIndex
 
             slots[newSlot] = newItem
             pendingAnimation = animation

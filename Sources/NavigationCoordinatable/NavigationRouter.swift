@@ -283,43 +283,27 @@ public extension NavigationRouter where T: NavigationCoordinatable {
     ) -> Output {
         return coordinator.root(route)
     }
-    
+
     @discardableResult func root<Input, Output: View>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>
     ) -> T {
         return coordinator.root(route)
     }
-    
+
     @discardableResult func root<Input, Output: Coordinatable>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input,
-        comparator: @escaping (Input, Input) -> Bool
-    ) -> Output {
-        return coordinator.root(route, input, comparator: comparator)
-    }
-    
-    @discardableResult func root<Input, Output: View>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
-        _ input: Input,
-        comparator: @escaping (Input, Input) -> Bool
-    ) -> T {
-        return coordinator.root(route, input, comparator: comparator)
-    }
-    
-    @discardableResult func root<Input: Equatable, Output: Coordinatable>(
-        _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
         _ input: Input
     ) -> Output {
-        return coordinator.root(route, input, comparator: { $0 == $1 })
+        return coordinator.root(route, input)
     }
 
-    @discardableResult func root<Input: Equatable, Output: View>(
+    @discardableResult func root<Input, Output: View>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Input, Output>>,
         _ input: Input
     ) -> T {
-        return coordinator.root(route, input, comparator: { $0 == $1 })
+        return coordinator.root(route, input)
     }
-    
+
     func isRoot<Output: Coordinatable>(
         _ route: KeyPath<T, Transition<T, RootSwitch, Void, Output>>
     ) -> Bool {
