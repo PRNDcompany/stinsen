@@ -22,8 +22,6 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
     }
     private let valueSubject = CurrentValueSubject<[NavigationStackItem], Never>([])
     private let poppedSubject = PassthroughSubject<Int, Never>()
-    private var cancellables = Set<AnyCancellable>()
-
     let initial: PartialKeyPath<T>
     let initialInput: Any?
     var root: NavigationRoot!
