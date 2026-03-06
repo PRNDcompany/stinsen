@@ -3,86 +3,11 @@ import SwiftUI
 import UIKit
 import Combine
 
-struct NavigationRootItem {
-    let keyPath: Int
-    let input: Any?
-    // Strong reference: root coordinator has no retain cycle
-    // (parent reference is weak, so Coordinator → Stack → Root → child is safe)
-    let child: ViewPresentable
-
-    init(keyPath: Int, input: Any?, child: ViewPresentable) {
-        self.keyPath = keyPath
-        self.input = input
-        self.child = child
-    }
-}
-
-struct RootSlot {
-    var item: NavigationRootItem
-    var transition: AnyTransition = .identity
-    var zIndex: Double = 0
-}
-
-/// Wrapper around childCoordinators
-/// Used so that you don't need to write @Published
-@MainActor
-public class NavigationRoot: ObservableObject {
-    var activeSlotIndex: Int = 0
-
-    var activeSlot: RootSlot? {
-        slots[safe: activeSlotIndex]
-    }
-
-    var slots: [RootSlot]
-    var zIndex: Double = 0
-
-    init(item: NavigationRootItem, transition: AnyTransition = .identity) {
-        let slot = RootSlot(item: item, transition: transition, zIndex: zIndex)
-        self.slots = [slot]
-    }
-
-    func updateItem(
-        _ newItem: NavigationRootItem,
-        animation: Animation?,
-        transition: AnyTransition,
-        zOrder: RootLayer
-    ) {
-        if let animation {
-            withAnimation(animation) {
-                activeSlotIndex = prepareSlotIndex(for: newItem, transition: transition, zOrder: zOrder)
-                objectWillChange.send()
-            }
-        } else {
-            slots[activeSlotIndex] = RootSlot(item: newItem, transition: transition, zIndex: zIndex)
-            objectWillChange.send()
-        }
-    }
-
-    private func prepareSlotIndex(for item: NavigationRootItem, transition: AnyTransition, zOrder: RootLayer) -> Int {
-        let slotIndex = 1 - activeSlotIndex
-        zIndex += zOrder == .front ? 1 : -1
-        setSlot(
-            at: slotIndex,
-            RootSlot(item: item, transition: transition, zIndex: zIndex)
-        )
-        return slotIndex
-    }
-
-
-    private func setSlot(at index: Int, _ slot: RootSlot) {
-        if index < slots.count {
-            slots[index] = slot
-        } else {
-            slots.append(slot)
-        }
-    }
-}
-
 /// Represents a stack of routes
 @MainActor
 public class CoordinatorStack<T: NavigationCoordinatable> {
     var dismissalAction: [Int: () -> Void] = [:]
-    
+
     weak var parent: ChildDismissable?
 
     // Combine-based state management
@@ -112,7 +37,7 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
     var valuePublisher: AnyPublisher<[NavigationStackItem], Never> {
         valueSubject.eraseToAnyPublisher()
     }
-    
+
     var poppedPublisher: AnyPublisher<Int, Never> {
         poppedSubject.eraseToAnyPublisher()
     }
@@ -123,9 +48,9 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
         self.initialInput = initialInput
         self.root = nil
     }
-    
+
     // MARK: - Setter Methods
-    
+
     /// Push a new item to the stack
     func push(_ item: NavigationStackItem) {
         // Check for duplicate push (same keyPath being pushed consecutively)
@@ -135,13 +60,13 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
 
         _value.append(item)
     }
-    
+
     /// Pop to a specific index
     func popToIndex(_ index: Int) {
         guard index >= -1 && index < _value.count else {
             return
         }
-        
+
         // Track coordinators that are being removed for memory leak detection
         #if DEBUG
         let itemsBeingRemoved: [NavigationStackItem]
@@ -150,7 +75,7 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
         } else {
             itemsBeingRemoved = Array(_value.suffix(from: index + 1))
         }
-        
+
         // Track each coordinator being removed
         for item in itemsBeingRemoved {
             if case .coordinator(let coordinator) = item.content {
@@ -158,7 +83,7 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
             }
         }
         #endif
-        
+
         if index == -1 {
             _value = []
         } else {
@@ -167,7 +92,7 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
         poppedSubject.send(index)
         // Published property will automatically notify subscribers
     }
-    
+
     /// Pop to a specific view controller
     func popToViewController(_ viewController: UIViewController) {
         if let index = _value.firstIndex(where: { $0.viewController === viewController }) {
@@ -179,7 +104,7 @@ public class CoordinatorStack<T: NavigationCoordinatable> {
     func indexOfViewController(_ viewController: UIViewController) -> Int? {
         return _value.firstIndex(where: { $0.viewController === viewController })
     }
-    
+
     /// Replace the entire stack
     func setStack(_ newValue: [NavigationStackItem]) {
         _value = newValue
