@@ -8,7 +8,7 @@ public protocol ViewPresentable {
     func view() -> AnyView
 }
 
-extension AnyView: @preconcurrency ViewPresentable {
+extension AnyView: ViewPresentable {
     nonisolated public func view() -> AnyView {
         return self
     }

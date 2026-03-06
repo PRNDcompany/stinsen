@@ -245,7 +245,7 @@ public extension NavigationCoordinatable {
         #endif
         
         // Check if already dismissing to prevent duplicate calls
-        if coordinator is NavigationCoordinatable {
+        if coordinator is (any NavigationCoordinatable) {
             if let navCoordinator = coordinator as? any NavigationCoordinatable,
                navCoordinator.isDismissing {
                 return

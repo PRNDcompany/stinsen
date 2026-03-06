@@ -12,7 +12,7 @@ final class CoordinatorMemoryLeakDetector {
     func trackCoordinator<T: Coordinatable>(_ coordinator: T, file: String, line: Int, function: String) {
         #if DEBUG
         // Store weak reference to check later
-        weak var weakCoordinator = coordinator
+        weak let weakCoordinator = coordinator
         let coordinatorType = String(describing: type(of: coordinator))
         
         // Check after a delay to see if it was deallocated

@@ -2,7 +2,7 @@
 
 import UIKit
 
-
+@MainActor
 enum FindControllerUtil {
     /// UIViewController의 부모 컨트롤러를 찾습니다.
     static func findParentController(of viewController: UIViewController) -> UIViewController? {

@@ -32,7 +32,7 @@ struct UIKitIntrospectionViewController<TargetViewControllerType: UIViewControll
         viewController.accessibilityLabel = "IntrospectionUIViewController<\(TargetViewControllerType.self)>"
         viewController.view.accessibilityLabel = "IntrospectionUIView<\(TargetViewControllerType.self)>"
 
-        weak var coordinator = context.coordinator
+        weak let coordinator = context.coordinator
         viewController.handler = { _viewController in
             self.findTargetView(_viewController, coordinator: coordinator)
         }
