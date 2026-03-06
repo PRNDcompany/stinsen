@@ -23,7 +23,6 @@ struct TabCoordinatableView<T: TabCoordinatable, U: View>: View {
                 }
             )
         )
-        .environmentObject(router)
     }
     
     init(paths: [AnyKeyPath], coordinator: T, customize: @escaping (AnyView) -> U) {

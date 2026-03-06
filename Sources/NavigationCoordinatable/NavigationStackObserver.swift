@@ -14,14 +14,14 @@ import Combine
 final class NavigationStackObserver<T: NavigationCoordinatable> {
     private let id: Int
     private weak var coordinator: T?
-    private weak var stack: NavigationStack<T>?
+    private weak var stack: CoordinatorStack<T>?
     private var cancellables = Set<AnyCancellable>()
     
     // Callbacks for presentation events
     var onPresentationNeeded: ((NavigationStackItem) -> Void)?
     var onDismissalNeeded: (() -> Void)?
     
-    init(id: Int, coordinator: T, stack: NavigationStack<T>) {
+    init(id: Int, coordinator: T, stack: CoordinatorStack<T>) {
         self.id = id
         self.coordinator = coordinator
         self.stack = stack

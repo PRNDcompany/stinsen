@@ -80,11 +80,11 @@ public class NavigationRoot: ObservableObject {
 
 /// Represents a stack of routes
 @MainActor
-public class NavigationStack<T: NavigationCoordinatable> {
+public class CoordinatorStack<T: NavigationCoordinatable> {
     var dismissalAction: [Int: () -> Void] = [:]
     
     weak var parent: ChildDismissable?
-    
+
     // Combine-based state management
     // NOTE: Using CurrentValueSubject instead of @Published because
     // @Published fires on willSet (before property update), which causes
@@ -187,7 +187,7 @@ public class NavigationStack<T: NavigationCoordinatable> {
 }
 
 /// Convenience checks against the navigation stack's contents
-public extension NavigationStack {
+public extension CoordinatorStack {
     /**
         The Hash of the route at the top of the stack
         - Returns: the hash of the route at the top of the stack or -1
@@ -241,3 +241,8 @@ struct NavigationStackItem {
         self.viewControllerRef = viewController.map { WeakRef(value: $0) }
     }
 }
+
+// MARK: - Deprecated
+
+@available(*, deprecated, renamed: "CoordinatorStack")
+public typealias NavigationStack = CoordinatorStack

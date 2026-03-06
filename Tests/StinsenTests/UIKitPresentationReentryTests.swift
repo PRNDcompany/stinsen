@@ -130,7 +130,7 @@ final class UIKitPresentationReentryTests: XCTestCase {
 
 @MainActor
 final class TestReentryCoordinator: NavigationCoordinatable {
-    let stack = Stinsen.NavigationStack<TestReentryCoordinator>(initial: \.main)
+    let stack = CoordinatorStack<TestReentryCoordinator>(initial: \.main)
 
     @Root var main = makeMain
     @Route(.push) var detail = makeDetail

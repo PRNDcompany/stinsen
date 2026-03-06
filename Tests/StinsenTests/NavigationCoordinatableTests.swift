@@ -242,7 +242,7 @@ final class NavigationCoordinatableTests: XCTestCase {
 
 @MainActor
 final class TestNavigationCoordinator: NavigationCoordinatable {
-    let stack = Stinsen.NavigationStack<TestNavigationCoordinator>(initial: \.mainView)
+    let stack = CoordinatorStack<TestNavigationCoordinator>(initial: \.mainView)
 
     @Root var mainView = makeMainView
     @Route(.push) var detailView = makeDetailView
@@ -283,7 +283,7 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
 
 @MainActor
 final class TestChildCoordinator: NavigationCoordinatable {
-    let stack = Stinsen.NavigationStack<TestChildCoordinator>(initial: \.childMain)
+    let stack = CoordinatorStack<TestChildCoordinator>(initial: \.childMain)
 
     @Root var childMain = makeChildMain
 

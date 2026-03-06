@@ -7,13 +7,9 @@ import UIKit
 public protocol NavigationCoordinatable: Coordinatable {
     typealias Route = NavigationRoute
     typealias Root = NavigationRoute
-    typealias Router = NavigationRouter<Self>
     associatedtype CustomizeViewType: View
-    associatedtype RouterStoreType
 
-    var routerStorable: RouterStoreType { get }
-    
-    var stack: NavigationStack<Self> { get }
+    var stack: CoordinatorStack<Self> { get }
 
     /**
      Implement this function if you wish to customize the view on all views and child coordinators, for instance, if you wish to change the `tintColor` or inject an `EnvironmentObject`.
@@ -214,12 +210,6 @@ public protocol NavigationCoordinatable: Coordinatable {
 
 @MainActor
 public extension NavigationCoordinatable {
-    nonisolated var routerStorable: Self {
-        get {
-            self
-        }
-    }
-    
     weak var parent: ChildDismissable? {
         get {
             return stack.parent
@@ -304,7 +294,7 @@ public extension NavigationCoordinatable {
     
     func dismissCoordinator(_ action: (() -> ())? = nil) {
         guard let parent = stack.parent else {
-            assertionFailure("dismissCoordinator: no parent to dismiss from")
+            assertionFailure("dismissCoordinator: no parent and no SwiftUI dismiss available")
             return
         }
         parent.dismissChild(coordinator: self, action: action)

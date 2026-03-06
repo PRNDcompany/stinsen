@@ -14,7 +14,7 @@ import Combine
 final class NavigationStackTests: XCTestCase {
 
     var coordinator: TestStackCoordinator!
-    var stack: Stinsen.NavigationStack<TestStackCoordinator>!
+    var stack: CoordinatorStack<TestStackCoordinator>!
 
     override func setUp() {
         super.setUp()
@@ -289,7 +289,7 @@ final class NavigationStackTests: XCTestCase {
 
 @MainActor
 final class TestStackCoordinator: NavigationCoordinatable {
-    let stack = Stinsen.NavigationStack<TestStackCoordinator>(initial: \.main)
+    let stack = CoordinatorStack<TestStackCoordinator>(initial: \.main)
 
     @Root var main = makeMain
 

@@ -6,7 +6,6 @@ import Combine
 struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     var coordinator: T
     private let id: Int
-    private let router: NavigationRouter<T>
     @StateObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
 
@@ -14,7 +13,6 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 
     var body: some View {
         commonView
-            .environmentObject(router)
     }
 
 
@@ -55,18 +53,11 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
             )
         }())
 
-        self.router = NavigationRouter(
-            id: id,
-            coordinator: coordinator.routerStorable
-        )
-
         if coordinator.stack.root == nil {
             coordinator.setupRoot()
         }
 
         self.root = coordinator.stack.root
-
-        RouterStore.shared.store(router: router)
 
         if let presentation = coordinator.stack.value[safe: id] {
             if case .view(let view) = presentation.content {
@@ -94,11 +85,20 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 /// swapping activeSlot.
 private struct NavigationRootView<T: NavigationCoordinatable>: View {
     @ObservedObject var root: NavigationRoot
+    @StateObject var context = Context()
+
     let coordinator: T
+
+    @Environment(\.dismiss) var dismissAction
 
     var body: some View {
         ZStack {
             slotView
+        }
+        .onAppear {
+            guard coordinator.stack.parent == nil else { return }
+            context.dismissProxy.dismissAction = dismissAction
+            coordinator.stack.parent = context.dismissProxy
         }
     }
 
@@ -109,5 +109,24 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
                 .zIndex(slot.zIndex)
                 .transition(slot.transition)
         }
+    }
+
+    final class Context: ObservableObject {
+        let dismissProxy = DismissProxy()
+    }
+}
+
+
+
+/// Lightweight ChildDismissable that wraps SwiftUI's DismissAction.
+/// Used as fallback parent when a coordinator has no real parent (e.g., root modal).
+@MainActor
+final class DismissProxy: ChildDismissable {
+    var dismissAction: DismissAction?
+
+
+    func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+        dismissAction?()
+        action?()
     }
 }

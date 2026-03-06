@@ -4,7 +4,7 @@ import SwiftUI
 
 // Test coordinator that intentionally creates a retain cycle
 final class LeakyTestCoordinator: NavigationCoordinatable {
-    let stack = NavigationStack<LeakyTestCoordinator>(initial: \LeakyTestCoordinator.start)
+    let stack = CoordinatorStack<LeakyTestCoordinator>(initial: \LeakyTestCoordinator.start)
     
     @Root var start = makeStart
     
@@ -27,7 +27,7 @@ final class LeakyTestCoordinator: NavigationCoordinatable {
 
 // Test coordinator without retain cycle
 final class NonLeakyTestCoordinator: NavigationCoordinatable {
-    let stack = NavigationStack<NonLeakyTestCoordinator>(initial: \NonLeakyTestCoordinator.start)
+    let stack = CoordinatorStack<NonLeakyTestCoordinator>(initial: \NonLeakyTestCoordinator.start)
     
     @Root var start = makeStart
     
