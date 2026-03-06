@@ -10,7 +10,7 @@ protocol NavigationRootOutputable: NavigationOutputable {
 }
 
 public protocol RouteType {
-    
+
 }
 
 public enum RootLayer {
@@ -50,15 +50,17 @@ extension Transition: NavigationRootOutputable where U == RootSwitch {
 }
 
 @propertyWrapper public class NavigationRoute<T: NavigationCoordinatable, U: RouteType, Input, Output: ViewPresentable> {
-    
+
     public var wrappedValue: Transition<T, U, Input, Output>
-    
+
     init(standard: Transition<T, U, Input, Output>) {
         self.wrappedValue = standard
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output == AnyView , U == Presentation {
+// MARK: - View overloads (PresentationType)
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyView, U == Presentation {
     public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> (() -> ViewOutput)), _ presentation: PresentationType) {
         self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
             return { _ in AnyView(wrappedValue(coordinator)()) }
@@ -74,23 +76,27 @@ extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output: Coordinatable, U == Presentation {
-    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output)), _ presentation: PresentationType) {
+// MARK: - Coordinator overloads (PresentationType, type-erased to AnyCoordinator)
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyCoordinator, U == Presentation {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> (() -> CoordOutput)), _ presentation: PresentationType) {
         self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
-            return { _ in wrappedValue(coordinator)() }
+            return { _ in AnyCoordinator(wrappedValue(coordinator)()) }
         }))
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == Presentation {
-    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output)), _ presentation: PresentationType) {
+extension NavigationRoute where T: NavigationCoordinatable, Output == AnyCoordinator, U == Presentation {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> ((Input) -> CoordOutput)), _ presentation: PresentationType) {
         self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
-            return { input in wrappedValue(coordinator)(input) }
+            return { input in AnyCoordinator(wrappedValue(coordinator)(input)) }
         }))
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output == AnyView , U == RootSwitch {
+// MARK: - View overloads (RootSwitch)
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyView, U == RootSwitch {
     public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> (() -> ViewOutput))) {
         self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
             return { _ in AnyView(wrappedValue(coordinator)()) }
@@ -106,7 +112,7 @@ extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Outp
 
 extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U == RootSwitch {
     public convenience init<ViewOutput: View>(wrappedValue: @escaping ((T) -> ((Input) -> ViewOutput))) {
-        self.init(standard: Transition(type: RootSwitch() , closure: { coordinator in
+        self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
             return { input in AnyView(wrappedValue(coordinator)(input)) }
         }))
     }
@@ -118,30 +124,32 @@ extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Input == Void , Output: Coordinatable, U == RootSwitch {
-    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output))) {
+// MARK: - Coordinator overloads (RootSwitch, type-erased to AnyCoordinator)
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyCoordinator, U == RootSwitch {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> (() -> CoordOutput))) {
         self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
-            return { _ in wrappedValue(coordinator)() }
+            return { _ in AnyCoordinator(wrappedValue(coordinator)()) }
         }))
     }
 
-    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> (() -> CoordOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
         self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
-            return { _ in wrappedValue(coordinator)() }
+            return { _ in AnyCoordinator(wrappedValue(coordinator)()) }
         }))
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == RootSwitch {
-    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output))) {
+extension NavigationRoute where T: NavigationCoordinatable, Output == AnyCoordinator, U == RootSwitch {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> ((Input) -> CoordOutput))) {
         self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
-            return { input in wrappedValue(coordinator)(input) }
+            return { input in AnyCoordinator(wrappedValue(coordinator)(input)) }
         }))
     }
 
-    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> ((Input) -> CoordOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
         self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
-            return { input in wrappedValue(coordinator)(input) }
+            return { input in AnyCoordinator(wrappedValue(coordinator)(input)) }
         }))
     }
 }
@@ -164,19 +172,18 @@ extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output: Coordinatable, U == Presentation {
-    public convenience init(wrappedValue: @escaping ((T) -> (() -> Output)), _ presentation: AnyPresentationType) {
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyCoordinator, U == Presentation {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> (() -> CoordOutput)), _ presentation: AnyPresentationType) {
         self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
-            return { _ in wrappedValue(coordinator)() }
+            return { _ in AnyCoordinator(wrappedValue(coordinator)()) }
         }))
     }
 }
 
-extension NavigationRoute where T: NavigationCoordinatable, Output: Coordinatable, U == Presentation {
-    public convenience init(wrappedValue: @escaping ((T) -> ((Input) -> Output)), _ presentation: AnyPresentationType) {
+extension NavigationRoute where T: NavigationCoordinatable, Output == AnyCoordinator, U == Presentation {
+    public convenience init<CoordOutput: Coordinatable>(wrappedValue: @escaping ((T) -> ((Input) -> CoordOutput)), _ presentation: AnyPresentationType) {
         self.init(standard: Transition(type: Presentation(type: presentation), closure: { coordinator in
-            return { input in wrappedValue(coordinator)(input) }
+            return { input in AnyCoordinator(wrappedValue(coordinator)(input)) }
         }))
     }
 }
-

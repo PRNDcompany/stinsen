@@ -2,7 +2,6 @@ import Foundation
 import SwiftUI
 
 // MARK: - Abstract base class
-@MainActor
 fileprivate class _AnyCoordinatorBase: Coordinatable {
     func view() -> AnyView {
         fatalError("must override")
@@ -21,7 +20,7 @@ fileprivate class _AnyCoordinatorBase: Coordinatable {
         fatalError("must override")
     }
 
-    init() {
+    nonisolated init() {
         guard type(of: self) != _AnyCoordinatorBase.self else {
             fatalError("_AnyCoordinatorBase instances can not be created; create a subclass instance instead")
         }
@@ -29,12 +28,13 @@ fileprivate class _AnyCoordinatorBase: Coordinatable {
 }
 
 // MARK: - Box container class
-@MainActor
 fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinatorBase {
-    var base: Base
+    // nonisolated(unsafe) allows nonisolated init to set these.
+    // Safe: only mutated during init, then accessed on MainActor.
+    nonisolated(unsafe) let base: Base
     private let _id: String
 
-    init(_ base: Base) {
+    nonisolated init(_ base: Base) {
         self.base = base
         self._id = base.id
     }
@@ -58,8 +58,9 @@ fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinator
 }
 
 // MARK: - AnyCoordinator Wrapper
-/// Type-erased wrapper for any `Coordinatable` type.
-@MainActor
+/// Type-erased wrapper for any `Coordinatable` type, analogous to `AnyView` for `View`.
+/// Enables opaque return types (`some Coordinatable`) in route declarations.
+
 public final class AnyCoordinator: Coordinatable {
     public var parent: ChildDismissable? {
         get { box.parent }
@@ -78,10 +79,10 @@ public final class AnyCoordinator: Coordinatable {
         _id
     }
 
-    private let box: _AnyCoordinatorBase
-    private let _id: String
+    private nonisolated(unsafe) var box: _AnyCoordinatorBase
+    private nonisolated(unsafe) var _id: String
 
-    public init<Base: Coordinatable>(_ base: Base) {
+    nonisolated public init<Base: Coordinatable>(_ base: Base) {
         box = _AnyCoordinatorBox(base)
         _id = base.id
     }

@@ -49,6 +49,16 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertNotNil(childCoordinator)
     }
 
+    func testRouteToOpaqueCoordinatorAppendsToStack() {
+        // When — uses `some Coordinatable` return type (type-erased to AnyCoordinator)
+        let child = coordinator.route(to: \.opaqueChild)
+
+        // Then
+        XCTAssertEqual(coordinator.stack.value.count, 1)
+        XCTAssertNotNil(child)
+        XCTAssertNotNil(child.parent)
+    }
+
     func testRouteWithInputPassesCorrectValue() {
         // Given
         let testInput = "Test Value"
@@ -221,7 +231,7 @@ final class NavigationCoordinatableTests: XCTestCase {
 
     func testCoordinatorDeallocation() {
         // Given
-        weak var weakChild: TestChildCoordinator?
+        weak var weakChild: AnyCoordinator?
 
         autoreleasepool {
             let parent = TestNavigationCoordinator()
@@ -249,6 +259,7 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
     @Route(.push) var secondDetailView = makeSecondDetailView
     @Route(.push) var detailWithInput = makeDetailWithInput
     @Route(.push) var childCoordinator = makeChildCoordinator
+    @Route(.push) var opaqueChild = makeOpaqueChild
     @Root var alternativeRoot = makeAlternativeRoot
     @Root var animatedRoot = makeAnimatedRoot
 
@@ -269,6 +280,10 @@ final class TestNavigationCoordinator: NavigationCoordinatable {
     }
 
     func makeChildCoordinator() -> TestChildCoordinator {
+        TestChildCoordinator()
+    }
+
+    func makeOpaqueChild() -> some Coordinatable {
         TestChildCoordinator()
     }
 
