@@ -319,23 +319,17 @@ public extension NavigationCoordinatable {
     internal func appear(_ int: Int) { }
 
     internal func disappear(_ id: Int) {
-        
-        // Execute dismissal action if exists
         if let action = stack.dismissalAction[id] {
             action()
-        } else {
         }
         stack.dismissalAction[id] = nil
-        
-        // IMPORTANT: When a view disappears (is dismissed), we should also clean up the stack
-        // Special handling for root coordinator (id = -1)
-        if id == -1 && stack.value.count > 0 {
-            // Remove the last item from the stack (the one that was just dismissed)
-            stack.popToIndex(stack.value.count - 2)
-        } else if id >= 0 && id < stack.value.count {
-            // Pop to the previous item (id - 1)
-            stack.popToIndex(id - 1)
-        } else {
+
+        // PresentationController(id: N) presents stack[N+1].
+        // When stack[N+1] is dismissed, we pop to index N (keeping stack[N]).
+        // Guard: only pop if stack[N+1] still exists — if it was already removed
+        // by a programmatic pop (e.g. popLast), skip to avoid spurious poppedSubject events.
+        if id < stack.value.count - 1 {
+            stack.popToIndex(id)
         }
     }
 

@@ -213,6 +213,71 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertNotEqual(coordinator.stack.currentRoute, -1)
     }
 
+    // MARK: - disappear() Regression Tests (UI gesture double-dismiss bug)
+
+    func testDisappear_withTwoItemStack_onlyRemovesChild() {
+        // Regression: UI gesture dismiss of stack[1] was incorrectly also removing stack[0],
+        // causing a double-dismiss of the parent VC.
+        //
+        // Given: stack = [A, B]
+        coordinator.route(to: \.detailView)        // stack[0] = A
+        coordinator.route(to: \.secondDetailView)  // stack[1] = B
+        XCTAssertEqual(coordinator.stack.value.count, 2)
+
+        // When: PresentationController(id=0) fires onDisappear — B dismissed by UI gesture
+        coordinator.disappear(0)
+
+        // Then: only B (stack[1]) is removed; A (stack[0]) must remain
+        XCTAssertEqual(coordinator.stack.value.count, 1,
+            "UI gesture dismiss of child must NOT remove parent from stack")
+    }
+
+    func testDisappear_withOneItemStack_clearsStack() {
+        // Given: stack = [A]
+        coordinator.route(to: \.detailView)
+        XCTAssertEqual(coordinator.stack.value.count, 1)
+
+        // When: PresentationController(id=-1) fires onDisappear — A dismissed by UI gesture
+        coordinator.disappear(-1)
+
+        // Then: stack is empty
+        XCTAssertEqual(coordinator.stack.value.count, 0)
+    }
+
+    func testDisappear_afterProgrammaticPop_isNoOp() {
+        // Regression: after a programmatic popLast removes B, the subsequent
+        // LifecycleObject.deinit would call disappear(0) again. This must be a no-op
+        // and must NOT remove A.
+        //
+        // Given: stack = [A, B] → programmatic pop → stack = [A]
+        coordinator.route(to: \.detailView)
+        coordinator.route(to: \.secondDetailView)
+        coordinator.popLast()
+        XCTAssertEqual(coordinator.stack.value.count, 1)
+
+        // When: disappear(0) called again (LifecycleObject.deinit after programmatic dismiss)
+        coordinator.disappear(0)
+
+        // Then: A is NOT removed — guard `id < stack.value.count - 1` prevents spurious pop
+        XCTAssertEqual(coordinator.stack.value.count, 1,
+            "disappear() after programmatic pop must be a no-op")
+    }
+
+    func testDisappear_withThreeItemStack_onlyRemovesDirectChild() {
+        // Given: stack = [A, B, C]
+        coordinator.route(to: \.detailView)
+        coordinator.route(to: \.secondDetailView)
+        coordinator.route(to: \.detailView)
+        XCTAssertEqual(coordinator.stack.value.count, 3)
+
+        // When: C (stack[2]) dismissed by UI gesture → PresentationController(id=1) fires
+        coordinator.disappear(1)
+
+        // Then: only C removed; A and B remain
+        XCTAssertEqual(coordinator.stack.value.count, 2,
+            "Only the directly dismissed child must be removed from the stack")
+    }
+
     // MARK: - Memory Management Tests
 
     func testWeakParentReference() {
