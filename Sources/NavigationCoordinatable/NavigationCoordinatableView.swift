@@ -111,6 +111,7 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
         }
     }
 
+    @MainActor
     final class Context: ObservableObject {
         let dismissProxy = DismissProxy()
     }
