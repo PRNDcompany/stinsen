@@ -2,17 +2,21 @@ import Foundation
 import SwiftUI
 
 // MARK: - Abstract base class
-fileprivate class _AnyCoordinatorBase: Coordinatable {
-    func view() -> AnyView {
+//
+// 타입 소거(type-erasure) 박스는 nonisolated init이 필요하다 (opaque `some Coordinatable`
+// 반환을 nonisolated 컨텍스트에서도 만들 수 있어야 하므로). 클래스 자체는 nonisolated로 두고,
+// Coordinatable의 MainActor 요구사항(view/parent/dismissChild)만 @MainActor로 명시한다.
+fileprivate nonisolated class _AnyCoordinatorBase: Coordinatable {
+    @MainActor func view() -> AnyView {
         fatalError("must override")
     }
 
-    var parent: ChildDismissable? {
+    @MainActor var parent: ChildDismissable? {
         get { fatalError("must override") }
         set { fatalError("must override") }
     }
 
-    func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+    @MainActor func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         fatalError("must override")
     }
 
@@ -28,7 +32,7 @@ fileprivate class _AnyCoordinatorBase: Coordinatable {
 }
 
 // MARK: - Box container class
-fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinatorBase {
+fileprivate nonisolated final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinatorBase {
     // nonisolated(unsafe) allows nonisolated init to set these.
     // Safe: only mutated during init, then accessed on MainActor.
     nonisolated(unsafe) let base: Base
@@ -39,16 +43,16 @@ fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinator
         self._id = base.id
     }
 
-    override func view() -> AnyView {
+    @MainActor override func view() -> AnyView {
         self.base.view()
     }
 
-    override var parent: ChildDismissable? {
+    @MainActor override var parent: ChildDismissable? {
         get { base.parent }
         set { base.parent = newValue }
     }
 
-    override func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+    @MainActor override func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         base.dismissChild(coordinator: coordinator, action: action)
     }
 
@@ -61,17 +65,17 @@ fileprivate final class _AnyCoordinatorBox<Base: Coordinatable>: _AnyCoordinator
 /// Type-erased wrapper for any `Coordinatable` type, analogous to `AnyView` for `View`.
 /// Enables opaque return types (`some Coordinatable`) in route declarations.
 
-public final class AnyCoordinator: Coordinatable {
-    public var parent: ChildDismissable? {
+public nonisolated final class AnyCoordinator: Coordinatable {
+    @MainActor public var parent: ChildDismissable? {
         get { box.parent }
         set { box.parent = newValue }
     }
 
-    public func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+    @MainActor public func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         box.dismissChild(coordinator: coordinator, action: action)
     }
 
-    public func view() -> AnyView {
+    @MainActor public func view() -> AnyView {
         box.view()
     }
 

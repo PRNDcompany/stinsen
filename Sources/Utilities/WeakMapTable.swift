@@ -9,7 +9,7 @@ import Foundation
 
 // Thread-safe via NSRecursiveLock
 
-final public class WeakMapTable<Key, Value>: @unchecked Sendable where Key: AnyObject {
+nonisolated final public class WeakMapTable<Key, Value>: @unchecked Sendable where Key: AnyObject {
   private var dictionary: [Weak<Key>: Value] = [:]
   private let lock = NSRecursiveLock()
 
@@ -89,7 +89,7 @@ final public class WeakMapTable<Key, Value>: @unchecked Sendable where Key: AnyO
 
 // MARK: - Weak
 
-private final class Weak<T>: Hashable where T: AnyObject {
+private nonisolated final class Weak<T>: Hashable where T: AnyObject {
   private let objectHashValue: Int
   weak var object: T?
 
@@ -110,7 +110,7 @@ private final class Weak<T>: Hashable where T: AnyObject {
 
 // MARK: - DeallocHook
 
-private final class DeallocHook {
+private nonisolated final class DeallocHook {
   private let handler: () -> Void
 
   init(handler: @escaping () -> Void) {

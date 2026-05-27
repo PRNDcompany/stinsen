@@ -122,7 +122,7 @@ private enum MapTables {
     static let lifecycle = WeakMapTable<UIViewController, Any>()
 }
 
-private final class LifecycleObject {
+private nonisolated final class LifecycleObject {
     var onDeinit: (() -> Void)?
     deinit {
         onDeinit?()

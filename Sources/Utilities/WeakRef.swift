@@ -1,7 +1,7 @@
 import Foundation
 
 // see https://swiftrocks.com/weak-dictionary-values-in-swift
-final class WeakRef<T: AnyObject>: Equatable {
+nonisolated final class WeakRef<T: AnyObject>: Equatable {
     static func == (lhs: WeakRef<T>, rhs: WeakRef<T>) -> Bool {
         lhs.value === rhs.value
     }
