@@ -70,6 +70,7 @@ final class CoordinatorMemoryLeakDetector {
 // Extension to make tracking easier
 extension Coordinatable {
     /// Call this when a coordinator is being dismissed/popped to track potential memory leaks
+    @MainActor
     func trackForMemoryLeak(file: String = #file, line: Int = #line, function: String = #function) {
         #if DEBUG
         CoordinatorMemoryLeakDetector.shared.trackCoordinator(self, file: file, line: line, function: function)
