@@ -100,6 +100,9 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
             context.dismissProxy.dismissAction = dismissAction
             coordinator.stack.parent = context.dismissProxy
         }
+        .onDisappear {
+            context.dismissProxy.completeDismissal()
+        }
     }
 
     @ViewBuilder
@@ -121,13 +124,25 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
 
 /// Lightweight ChildDismissable that wraps SwiftUI's DismissAction.
 /// Used as fallback parent when a coordinator has no real parent (e.g., root modal).
+///
+/// The dismissal `action` is not run immediately: running it while the dismiss
+/// transition is still in flight races any presentation the action performs.
+/// It is held until the host view reports its disappearance, matching the
+/// "after the screen is gone" semantics of the popTo/deinit dismiss paths.
 @MainActor
 final class DismissProxy: ChildDismissable {
     var dismissAction: DismissAction?
 
+    private var completionHandler: (() -> Void)?
 
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+        completionHandler = action
         dismissAction?()
-        action?()
+    }
+
+    func completeDismissal() {
+        guard let completionHandler else { return }
+        self.completionHandler = nil
+        completionHandler()
     }
 }
