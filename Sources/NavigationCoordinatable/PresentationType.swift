@@ -3,8 +3,10 @@ import SwiftUI
 
 @MainActor
 public protocol PresentationType {
-    func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented?
+    /// - Parameter onRemoved: Removal notification, born in PresentationController.
+    ///   Injected at creation time so detection can be wired where the view controller is made.
+    func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T, onRemoved: @escaping () -> Void) -> ViewControllerPresented?
     func makeViewController<Content: View>(content: Content) -> UIViewController
-    func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void)
+    func presented(parent: UIViewController, content: UIViewController)
     func dismissed(viewController: UIViewController)
 }

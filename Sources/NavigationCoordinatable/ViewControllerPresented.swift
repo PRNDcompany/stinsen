@@ -6,14 +6,21 @@ public final class ViewControllerPresented {
 
     init(
         viewController: UIViewController? = nil,
-        presentationType: PresentationType
+        presentationType: PresentationType,
+        onRemoved: @escaping () -> Void
     ) {
         self.presentationType = presentationType
+        self.onRemoved = onRemoved
         self.strongViewController = viewController
         self.weakViewController = viewController
     }
 
     var presentationType: PresentationType
+
+    /// Removal notification wrapper born in PresentationController.present(item:).
+    /// Carried on this handle so presentation-time signals (e.g. a dealloc fallback)
+    /// share the same once-guard with the creation-time observer wiring.
+    let onRemoved: () -> Void
 
     var viewController: UIViewController? {
         return weakViewController

@@ -319,18 +319,27 @@ public extension NavigationCoordinatable {
     internal func appear(_ int: Int) { }
 
     internal func disappear(_ id: Int) {
-        if let action = stack.dismissalAction[id] {
-            action()
-        }
-        stack.dismissalAction[id] = nil
+        // FIXME: 검증용 로그 — 검증 완료 후 제거
+        print("🔬 [RemovalLedger] disappear — id=\(id) stackCount=\(stack.value.count) hasAction=\(stack.dismissalAction[id] != nil)")
 
         // PresentationController(id: N) presents stack[N+1].
         // When stack[N+1] is dismissed, we pop to index N (keeping stack[N]).
         // Guard: only pop if stack[N+1] still exists — if it was already removed
         // by a programmatic pop (e.g. popLast), skip to avoid spurious poppedSubject events.
+        // The stale check must run BEFORE the dismissal action: notification arrives after
+        // the transition completed, so the action may push a new screen — judging staleness
+        // after that would delete the freshly pushed item.
         if id < stack.value.count - 1 {
             stack.popToIndex(id)
+            // FIXME: 검증용 로그 — 검증 완료 후 제거
+            print("🔬 [RemovalLedger] disappear — 스테일 정리 popToIndex(\(id)) → stackCount=\(stack.value.count)")
         }
+
+        // Consume before invoking: the action may register a new dismissalAction
+        // at the same index, which must not be wiped afterwards.
+        let action = stack.dismissalAction[id]
+        stack.dismissalAction[id] = nil
+        action?()
     }
 
     func popLast(_ action: (() -> ())? = nil) {
