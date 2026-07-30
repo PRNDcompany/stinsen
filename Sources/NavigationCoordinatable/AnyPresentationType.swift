@@ -10,8 +10,8 @@ public struct AnyPresentationType: PresentationType {
         self.presentationType = presentationType
     }
 
-    public func makePresented<T>(content: StackItemContent, nextId: Int, coordinator: T, onRemoved: @escaping () -> Void) -> ViewControllerPresented? where T: NavigationCoordinatable {
-        presentationType.makePresented(content: content, nextId: nextId, coordinator: coordinator, onRemoved: onRemoved)
+    public func makePresented<T>(content: StackItemContent, nextId: Int, coordinator: T, itemUid: UUID, onRemoved: @escaping () -> Void) -> ViewControllerPresented? where T: NavigationCoordinatable {
+        presentationType.makePresented(content: content, nextId: nextId, coordinator: coordinator, itemUid: itemUid, onRemoved: onRemoved)
     }
 
     public func makeViewController<Content: View>(content: Content) -> UIViewController {

@@ -227,13 +227,14 @@ final class NavigationStackTests: XCTestCase {
     func testDismissalActionIsStored() {
         // Given
         let expectation = XCTestExpectation(description: "Dismissal action called")
+        let itemUid = UUID()
 
-        stack.dismissalAction[0] = {
+        stack.dismissalAction[itemUid, default: []].append {
             expectation.fulfill()
         }
 
         // When
-        stack.dismissalAction[0]?()
+        stack.dismissalAction[itemUid]?.forEach { $0() }
 
         // Then
         wait(for: [expectation], timeout: 1.0)
@@ -303,7 +304,9 @@ class MockPresentationType: PresentationType {
     func makePresented<T: NavigationCoordinatable>(
         content: StackItemContent,
         nextId: Int,
-        coordinator: T
+        coordinator: T,
+        itemUid: UUID,
+        onRemoved: @escaping () -> Void
     ) -> ViewControllerPresented? {
         return nil
     }
@@ -312,8 +315,7 @@ class MockPresentationType: PresentationType {
         return UIHostingController(rootView: content)
     }
 
-    func presented(parent: UIViewController, content: UIViewController,
-                   onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {}
+    func presented(parent: UIViewController, content: UIViewController) {}
 
     func dismissed(viewController: UIViewController) {}
 }

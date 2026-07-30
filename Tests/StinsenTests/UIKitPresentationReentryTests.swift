@@ -53,63 +53,9 @@ final class UIKitPresentationReentryTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
 
-    // MARK: - UIKitPresentation Callback Tests
-
-    func testPresentedCallsOnAppearedAsync() {
-        // Given
-        let presentation = UIKitPresentation(
-            make: { content, _ in UIHostingController(rootView: content) },
-            present: { _, _ in }
-        )
-        // Use makeViewController to get the correct ViewController type (UIHostingController<AnyView>)
-        let content = presentation.makeViewController(content: Text("Test"))
-        let expectation = XCTestExpectation(description: "onAppeared called")
-
-        // When
-        presentation.presented(
-            parent: parentViewController,
-            content: content,
-            onAppeared: {
-                expectation.fulfill()
-            },
-            onDismissed: {}
-        )
-
-        // Then
-        wait(for: [expectation], timeout: 0.5)
-    }
-
-    func testOnDismissedNotCalledDuringPresent() {
-        // Given
-        let presentation = UIKitPresentation(
-            make: { content, _ in UIHostingController(rootView: content) },
-            present: { _, _ in }
-        )
-        // Use makeViewController to get the correct ViewController type (UIHostingController<AnyView>)
-        let content = presentation.makeViewController(content: Text("Test"))
-        var onDismissedCalled = false
-
-        // When
-        presentation.presented(
-            parent: parentViewController,
-            content: content,
-            onAppeared: {},
-            onDismissed: { onDismissedCalled = true }
-        )
-
-        // Wait to ensure onDismissed is not called
-        let expectation = XCTestExpectation(description: "Wait for potential onDismissed")
-        expectation.isInverted = true
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            if onDismissedCalled {
-                expectation.fulfill()
-            }
-        }
-
-        wait(for: [expectation], timeout: 0.5)
-        XCTAssertFalse(onDismissedCalled, "onDismissed should not be called during present")
-    }
+    // NOTE: presented(parent:content:onAppeared:onDismissed:) 콜백 검증 테스트 2건은 삭제됨 —
+    // 체크포인트(명단 감지기 재설계)에서 presented()의 생명주기 콜백 자체가 제거되었고,
+    // "조기 통지 금지"는 이제 RemovalLedgerObserver(viewDidDisappear 판정)가 구조적으로 보장한다.
 
     func testMakeViewControllerCreatesCorrectType() {
         // Given

@@ -27,9 +27,7 @@ final class PresentationTypeTests: XCTestCase {
         // presented/dismissed should be callable
         pt.presented(
             parent: UIViewController(),
-            content: vc,
-            onAppeared: {},
-            onDismissed: {}
+            content: vc
         )
         pt.dismissed(viewController: vc)
     }
@@ -91,7 +89,9 @@ final class PresentationTypeTests: XCTestCase {
         // Should accept PresentationType directly, not just UIKitPresentationType
         let presented = ViewControllerPresented(
             viewController: vc,
-            presentationType: pt
+            presentationType: pt,
+            itemUid: UUID(),
+            onRemoved: {}
         )
 
         XCTAssertNotNil(presented.viewController)
@@ -112,7 +112,9 @@ private class TestDirectPresentationType: PresentationType {
     func makePresented<T: NavigationCoordinatable>(
         content: StackItemContent,
         nextId: Int,
-        coordinator: T
+        coordinator: T,
+        itemUid: UUID,
+        onRemoved: @escaping () -> Void
     ) -> ViewControllerPresented? {
         return nil
     }
@@ -124,9 +126,7 @@ private class TestDirectPresentationType: PresentationType {
 
     func presented(
         parent: UIViewController,
-        content: UIViewController,
-        onAppeared: @escaping () -> Void,
-        onDismissed: @escaping () -> Void
+        content: UIViewController
     ) {
         presentedCalled = true
     }

@@ -48,19 +48,21 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
         }
     }
 
-    public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T, onRemoved: @escaping () -> Void) -> ViewControllerPresented? {
+    public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T, itemUid: UUID, onRemoved: @escaping () -> Void) -> ViewControllerPresented? {
         switch content {
         case .view:
             let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
             return ViewControllerPresented(
                 viewController: makeViewController(content: view, onRemoved: onRemoved),
                 presentationType: self,
+                itemUid: itemUid,
                 onRemoved: onRemoved
             )
         case .coordinator(let c):
             return ViewControllerPresented(
                 viewController: makeViewController(content: c.view(), onRemoved: onRemoved),
                 presentationType: self,
+                itemUid: itemUid,
                 onRemoved: onRemoved
             )
         }

@@ -318,28 +318,15 @@ public extension NavigationCoordinatable {
     /// navigation state changes should be explicit through push/pop/dismiss.
     internal func appear(_ int: Int) { }
 
-    internal func disappear(_ id: Int) {
-        // FIXME: 검증용 로그 — 검증 완료 후 제거
-        print("🔬 [RemovalLedger] disappear — id=\(id) stackCount=\(stack.value.count) hasAction=\(stack.dismissalAction[id] != nil)")
-
-        // PresentationController(id: N) presents stack[N+1].
-        // When stack[N+1] is dismissed, we pop to index N (keeping stack[N]).
-        // Guard: only pop if stack[N+1] still exists — if it was already removed
-        // by a programmatic pop (e.g. popLast), skip to avoid spurious poppedSubject events.
-        // The stale check must run BEFORE the dismissal action: notification arrives after
-        // the transition completed, so the action may push a new screen — judging staleness
-        // after that would delete the freshly pushed item.
-        if id < stack.value.count - 1 {
-            stack.popToIndex(id)
-            // FIXME: 검증용 로그 — 검증 완료 후 제거
-            print("🔬 [RemovalLedger] disappear — 스테일 정리 popToIndex(\(id)) → stackCount=\(stack.value.count)")
+    internal func disappear(deadUid: UUID) {
+        // Clean the stack only if the dead item is still in it (e.g. gesture pop).
+        // Judged before running callbacks so a late report never evicts a slot's new tenant.
+        if let deadIndex = stack.value.firstIndex(where: { $0.uid == deadUid }) {
+            stack.popToIndex(deadIndex - 1)
         }
 
-        // Consume before invoking: the action may register a new dismissalAction
-        // at the same index, which must not be wiped afterwards.
-        let action = stack.dismissalAction[id]
-        stack.dismissalAction[id] = nil
-        action?()
+        let actions = stack.dismissalAction.removeValue(forKey: deadUid) ?? []
+        actions.forEach { $0() }
     }
 
     func popLast(_ action: (() -> ())? = nil) {
@@ -348,7 +335,13 @@ public extension NavigationCoordinatable {
     
     internal func popTo(_ int: Int, _ action: (() -> ())? = nil) {
         if let action = action {
-            self.stack.dismissalAction[int] = action
+            if let bottomRemoved = stack.value[safe: int + 1] {
+                // Completion fires when the bottom-most removed item reports its death.
+                stack.dismissalAction[bottomRemoved.uid, default: []].append(action)
+            } else {
+                // Nothing to remove — the pop completes trivially.
+                action()
+            }
         }
 
         stack.popToIndex(int)
@@ -363,13 +356,31 @@ public extension NavigationCoordinatable {
         return self
     }
     
+    private func registerDismissalAction(_ onDismiss: (() -> Void)?, forItemUid uid: UUID) {
+        guard let onDismiss = onDismiss else { return }
+        stack.dismissalAction[uid, default: []].append(onDismiss)
+    }
+
+    /// Runs a route call and registers onDismiss on the item it pushed.
+    /// Skipped when the duplicate-push guard dropped the push.
+    private func routeRegisteringDismissal<Output>(
+        _ onDismiss: @escaping () -> Void,
+        perform route: () -> Output
+    ) -> Output {
+        let countBefore = stack.value.count
+        let output = route()
+        if stack.value.count > countBefore, let uid = stack.value.last?.uid {
+            registerDismissalAction(onDismiss, forItemUid: uid)
+        }
+        return output
+    }
+
     @discardableResult func route<Input, Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input,
         onDismiss: @escaping () -> ()
     ) -> Output {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route, input)
+        routeRegisteringDismissal(onDismiss) { self.route(to: route, input) }
     }
     
     @discardableResult func route<Input, Output: Coordinatable>(
@@ -393,8 +404,7 @@ public extension NavigationCoordinatable {
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
     ) -> Output {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route)
+        routeRegisteringDismissal(onDismiss) { self.route(to: route) }
     }
 
     @discardableResult func route<Output: Coordinatable>(
@@ -418,8 +428,7 @@ public extension NavigationCoordinatable {
         _ input: Input,
         onDismiss: @escaping () -> ()
     ) -> Self {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route, input)
+        routeRegisteringDismissal(onDismiss) { self.route(to: route, input) }
     }
 
     @discardableResult func route<Input, Output: View>(
@@ -442,8 +451,7 @@ public extension NavigationCoordinatable {
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
     ) -> Self {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route)
+        routeRegisteringDismissal(onDismiss) { self.route(to: route) }
     }
 
     @discardableResult func route<Output: View>(
@@ -475,15 +483,13 @@ public extension NavigationCoordinatable {
         to view: Content,
         onDismiss: (() -> Void)? = nil
     ) -> Self {
-        if let onDismiss = onDismiss {
-            stack.dismissalAction[stack.value.count - 1] = onDismiss
-        }
         let item = NavigationStackItem(
             presentationType: presentationType,
             content: .view(AnyView(view)),
             keyPath: ImperativeRouteId.next(),
             input: nil
         )
+        registerDismissalAction(onDismiss, forItemUid: item.uid)
         stack.push(item)
         return self
     }
@@ -500,15 +506,13 @@ public extension NavigationCoordinatable {
         to coordinator: Output,
         onDismiss: (() -> Void)? = nil
     ) -> Output {
-        if let onDismiss = onDismiss {
-            stack.dismissalAction[stack.value.count - 1] = onDismiss
-        }
         let item = NavigationStackItem(
             presentationType: presentationType,
             content: .coordinator(coordinator),
             keyPath: ImperativeRouteId.next(),
             input: nil
         )
+        registerDismissalAction(onDismiss, forItemUid: item.uid)
         stack.push(item)
         coordinator.parent = self
         return coordinator

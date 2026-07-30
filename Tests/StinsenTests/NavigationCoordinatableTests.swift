@@ -88,15 +88,16 @@ final class NavigationCoordinatableTests: XCTestCase {
         // Given
         coordinator.route(to: \.detailView)
         XCTAssertEqual(coordinator.stack.value.count, 1)
+        let bottomRemovedUid = coordinator.stack.value[0].uid
 
         // When
         coordinator.popToRoot {
             // Completion would be called by PresentationController during UIKit dismissal
         }
 
-        // Then - stack is cleared and dismissal action is stored
+        // Then - stack is cleared; completion is keyed to the bottom-most removed item
         XCTAssertEqual(coordinator.stack.value.count, 0)
-        XCTAssertNotNil(coordinator.stack.dismissalAction[-1])
+        XCTAssertNotNil(coordinator.stack.dismissalAction[bottomRemovedUid])
     }
 
     // MARK: - Focus Tests
@@ -223,9 +224,10 @@ final class NavigationCoordinatableTests: XCTestCase {
         coordinator.route(to: \.detailView)        // stack[0] = A
         coordinator.route(to: \.secondDetailView)  // stack[1] = B
         XCTAssertEqual(coordinator.stack.value.count, 2)
+        let bUid = coordinator.stack.value[1].uid
 
-        // When: PresentationController(id=0) fires onDisappear — B dismissed by UI gesture
-        coordinator.disappear(0)
+        // When: B dismissed by UI gesture — its removal report arrives
+        coordinator.disappear(deadUid: bUid)
 
         // Then: only B (stack[1]) is removed; A (stack[0]) must remain
         XCTAssertEqual(coordinator.stack.value.count, 1,
@@ -236,29 +238,30 @@ final class NavigationCoordinatableTests: XCTestCase {
         // Given: stack = [A]
         coordinator.route(to: \.detailView)
         XCTAssertEqual(coordinator.stack.value.count, 1)
+        let aUid = coordinator.stack.value[0].uid
 
-        // When: PresentationController(id=-1) fires onDisappear — A dismissed by UI gesture
-        coordinator.disappear(-1)
+        // When: A dismissed by UI gesture — its removal report arrives
+        coordinator.disappear(deadUid: aUid)
 
         // Then: stack is empty
         XCTAssertEqual(coordinator.stack.value.count, 0)
     }
 
     func testDisappear_afterProgrammaticPop_isNoOp() {
-        // Regression: after a programmatic popLast removes B, the subsequent
-        // LifecycleObject.deinit would call disappear(0) again. This must be a no-op
-        // and must NOT remove A.
+        // Regression: after a programmatic popLast removes B, B's removal report
+        // still arrives later. This must be a no-op and must NOT remove A.
         //
         // Given: stack = [A, B] → programmatic pop → stack = [A]
         coordinator.route(to: \.detailView)
         coordinator.route(to: \.secondDetailView)
+        let bUid = coordinator.stack.value[1].uid
         coordinator.popLast()
         XCTAssertEqual(coordinator.stack.value.count, 1)
 
-        // When: disappear(0) called again (LifecycleObject.deinit after programmatic dismiss)
-        coordinator.disappear(0)
+        // When: B's late removal report arrives (ledger already recorded the pop)
+        coordinator.disappear(deadUid: bUid)
 
-        // Then: A is NOT removed — guard `id < stack.value.count - 1` prevents spurious pop
+        // Then: A is NOT removed — the dead uid is no longer in the stack, so no cleanup
         XCTAssertEqual(coordinator.stack.value.count, 1,
             "disappear() after programmatic pop must be a no-op")
     }
@@ -269,13 +272,86 @@ final class NavigationCoordinatableTests: XCTestCase {
         coordinator.route(to: \.secondDetailView)
         coordinator.route(to: \.detailView)
         XCTAssertEqual(coordinator.stack.value.count, 3)
+        let cUid = coordinator.stack.value[2].uid
 
-        // When: C (stack[2]) dismissed by UI gesture → PresentationController(id=1) fires
-        coordinator.disappear(1)
+        // When: C (stack[2]) dismissed by UI gesture — its removal report arrives
+        coordinator.disappear(deadUid: cUid)
 
         // Then: only C removed; A and B remain
         XCTAssertEqual(coordinator.stack.value.count, 2,
             "Only the directly dismissed child must be removed from the stack")
+    }
+
+    // MARK: - Identity Guard Tests (S15 — same-tick pop+push slot reuse)
+
+    func testDisappear_lateReportAfterSlotReuse_doesNotEvictNewcomer() {
+        // S15: pop then same-tick re-push reuses slot 0. The old tenant's death report
+        // arrives after the newcomer moved in — it must not evict the newcomer.
+        //
+        // Given: A1 pushed → popped → A2 pushed into the same slot
+        coordinator.route(to: \.detailView)                   // A1
+        let a1Uid = coordinator.stack.value[0].uid
+        coordinator.popLast()                                  // ledger: []
+        coordinator.route(to: \.detailView)                   // A2 — same route, same slot
+        let a2Uid = coordinator.stack.value[0].uid
+        XCTAssertNotEqual(a1Uid, a2Uid, "each push must mint its own identity")
+
+        // When: A1's late removal report arrives (transition finished after A2's push)
+        coordinator.disappear(deadUid: a1Uid)
+
+        // Then: A2 survives — the report names A1, and A1 is no longer in the stack
+        XCTAssertEqual(coordinator.stack.value.count, 1,
+            "a late report must never evict the slot's new tenant")
+        XCTAssertEqual(coordinator.stack.value[0].uid, a2Uid)
+    }
+
+    func testDisappear_lateReportAfterSlotReuse_runsOnlyDeadItemsCallbacks() {
+        // S15 companion: the late report must consume exactly the dead item's callbacks —
+        // the newcomer's onDismiss must survive untouched.
+        var fired: [String] = []
+
+        coordinator.route(to: \.detailView, onDismiss: { fired.append("A1") })
+        let a1Uid = coordinator.stack.value[0].uid
+        coordinator.popLast()
+        coordinator.route(to: \.detailView, onDismiss: { fired.append("A2") })
+        let a2Uid = coordinator.stack.value[0].uid
+
+        // When: A1's late report arrives
+        coordinator.disappear(deadUid: a1Uid)
+
+        // Then: only A1's callback fired; A2's stays registered for its own death
+        XCTAssertEqual(fired, ["A1"])
+        XCTAssertNotNil(coordinator.stack.dismissalAction[a2Uid])
+    }
+
+    func testDismissalActions_onDismissAndPopCompletion_bothFire() {
+        // Known original defect (answer sheet S1): pop completion used to overwrite the
+        // route-time onDismiss under the same index key. With uid keys both coexist.
+        var fired: [String] = []
+
+        coordinator.route(to: \.detailView, onDismiss: { fired.append("onDismiss") })
+        let uid = coordinator.stack.value[0].uid
+        coordinator.popLast { fired.append("completion") }
+
+        // When: the removal report arrives
+        coordinator.disappear(deadUid: uid)
+
+        // Then: both callbacks fire, in registration order
+        XCTAssertEqual(fired, ["onDismiss", "completion"])
+    }
+
+    func testRouteOnDismiss_duplicatePushDropped_doesNotRegisterCallback() {
+        // The duplicate-push guard silently drops a consecutive push of the same route
+        // (e.g. a double-tap). Its onDismiss must not attach to the existing instance —
+        // otherwise that screen's close would fire callbacks twice.
+        coordinator.route(to: \.detailView)
+        let existingUid = coordinator.stack.value[0].uid
+
+        coordinator.route(to: \.detailView, onDismiss: { })
+
+        XCTAssertEqual(coordinator.stack.value.count, 1)
+        XCTAssertNil(coordinator.stack.dismissalAction[existingUid],
+            "a dropped push must not attach its onDismiss to the surviving instance")
     }
 
     // MARK: - Memory Management Tests

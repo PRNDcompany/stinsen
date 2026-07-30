@@ -51,17 +51,19 @@ final class PresentationController<T: NavigationCoordinatable> {
         // Removal notification is born here — the owner of currentPresented/disappear —
         // and injected at creation time so detection is wired where the VC is made.
         // One-shot semantics live in the observer: it discards this closure after firing.
-        let onRemoved: () -> Void = { [weak self, weak coordinator, id] in
-            // FIXME: 검증용 로그 — 검증 완료 후 제거
-            print("🔬 [RemovalLedger] onDismissed 발화")
-            self?.currentPresented = nil
-            coordinator?.disappear(id)
+        let onRemoved: () -> Void = { [weak self, weak coordinator, uid = item.uid] in
+            // Vacate the slot only if it is still held by the dead item's own handle.
+            if self?.currentPresented?.itemUid == uid {
+                self?.currentPresented = nil
+            }
+            coordinator?.disappear(deadUid: uid)
         }
 
         guard let presented = item.presentationType.makePresented(
             content: item.content,
             nextId: id + 1,
             coordinator: coordinator,
+            itemUid: item.uid,
             onRemoved: onRemoved
         ) else {
             return

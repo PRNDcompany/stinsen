@@ -6,7 +6,8 @@ import Combine
 /// Represents a stack of routes
 @MainActor
 public class CoordinatorStack<T: NavigationCoordinatable> {
-    var dismissalAction: [Int: () -> Void] = [:]
+    /// Dismissal callbacks keyed by item uid — a late report consumes exactly its own item's callbacks.
+    var dismissalAction: [UUID: [() -> Void]] = [:]
 
     weak var parent: ChildDismissable?
 
@@ -139,6 +140,8 @@ public enum StackItemContent {
 }
 
 struct NavigationStackItem {
+    /// Instance identity. keyPath cannot serve this — declarative routes share one hash per @Route.
+    let uid = UUID()
     let presentationType: PresentationType
     let content: StackItemContent
     let keyPath: Int
