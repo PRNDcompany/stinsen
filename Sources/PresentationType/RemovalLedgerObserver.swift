@@ -61,8 +61,6 @@ final class RemovalObserverViewController: UIViewController {
 
         let isPopped = host.navigationController == nil
         let isDismissed = host.presentingViewController == nil
-        // FIXME: 검증용 로그 — 검증 완료 후 제거
-        print("🔬 [RemovalLedger] viewDidDisappear — nav \(isPopped ? "없음" : "있음") / presenting \(isDismissed ? "없음" : "있음") → \(isPopped && isDismissed ? "제거(통지)" : "유지(무시)")")
         guard isPopped, isDismissed else { return }
 
         guard let onRemoved else { return }
