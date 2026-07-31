@@ -100,6 +100,9 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
             context.dismissProxy.dismissAction = dismissAction
             coordinator.stack.parent = context.dismissProxy
         }
+        .background {
+            RemovalDetectorView(onRemoved: context.dismissProxy.completeDismissal)
+        }
     }
 
     @ViewBuilder
@@ -118,16 +121,20 @@ private struct NavigationRootView<T: NavigationCoordinatable>: View {
 }
 
 
-
-/// Lightweight ChildDismissable that wraps SwiftUI's DismissAction.
-/// Used as fallback parent when a coordinator has no real parent (e.g., root modal).
 @MainActor
 final class DismissProxy: ChildDismissable {
     var dismissAction: DismissAction?
 
+    private var onDismissed: (() -> Void)?
 
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
+        onDismissed = action
         dismissAction?()
-        action?()
+    }
+
+    func completeDismissal() {
+        guard let onDismissed else { return }
+        self.onDismissed = nil
+        onDismissed()
     }
 }
