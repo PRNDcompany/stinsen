@@ -474,6 +474,48 @@ public extension NavigationCoordinatable {
     }
 
     /**
+     Presents a view controller with the given presentation type.
+
+     The view controller is presented as it is — it is not wrapped, subclassed or
+     otherwise adapted, and nothing is attached to it. It gets exactly the same
+     treatment as a SwiftUI screen from there on: the same lifecycle callbacks, the same
+     place in `popLast()` / `popToRoot()` / `popTo(id:)`, and the same behaviour when
+     something outside the coordinator closes it.
+
+     ```swift
+     coordinator.route(.push, to: ProductViewController(id: 42))
+     coordinator.route(.modal, to: FilterViewController(), id: "filter")
+     ```
+
+     - Parameter presentationType: How to put it on screen. The built-in `.push`,
+       `.modal` and `.fullScreen` accept any view controller; a presentation built with
+       `AnyPresentationType(make:present:)` is typed to whatever its `make` closure
+       returns and can only present that type.
+     - Parameter viewController: The view controller to present.
+     - Parameter id: Optional name for this screen, so it can be navigated back to later
+       with `popTo(id:)`. Without one the screen is anonymous — reachable only by
+       `popLast()` / `popToRoot()`, never by name.
+     - Parameter onDismiss: Optional closure called when this screen goes away, whichever
+       path removed it.
+     */
+    @discardableResult func route(
+        _ presentationType: AnyPresentationType,
+        to viewController: UIViewController,
+        id: String? = nil,
+        onDismiss: (() -> Void)? = nil
+    ) -> Self {
+        appendRecord(
+            presentation: presentationType,
+            content: .viewController(viewController),
+            route: id.map(RouteKey.named) ?? .anonymous(),
+            keyPath: ImperativeRouteId.next(),
+            input: nil,
+            onDismiss: onDismiss
+        )
+        return self
+    }
+
+    /**
      Presents a coordinator with the given presentation type without requiring a pre-declared @Route.
 
      - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).

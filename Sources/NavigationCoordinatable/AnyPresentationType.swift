@@ -59,11 +59,20 @@ extension AnyPresentationType {
 
 // MARK: - Standard Presentation Types
 
+// The built-in presentations are typed to `UIViewController`, not to the
+// `UIHostingController` their `make` closure happens to return.
+//
+// `UIKitPresentation` casts the content down to its `ViewController` parameter before
+// handing it to `present`, so a presentation typed to `UIHostingController<AnyView>` can
+// only ever present SwiftUI content the library built itself — a view controller the app
+// supplied fails the cast and hits an assertion. Widening the parameter is what lets
+// `route(.push, to: MyViewController())` work at all, and it costs nothing: `make` may
+// still return whatever subclass it likes.
 extension AnyPresentationType {
     /// Push presentation using UINavigationController.
     public static var push: AnyPresentationType {
         AnyPresentationType(
-            make: { content, _ in UIHostingController(rootView: content) },
+            make: { content, _ -> UIViewController in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.navigationController?.pushViewController(viewController, animated: true)
             },
@@ -74,7 +83,7 @@ extension AnyPresentationType {
     /// Modal presentation.
     public static var modal: AnyPresentationType {
         AnyPresentationType(
-            make: { content, _ in UIHostingController(rootView: content) },
+            make: { content, _ -> UIViewController in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.present(viewController, animated: true)
             },
@@ -85,7 +94,7 @@ extension AnyPresentationType {
     /// Full-screen modal presentation.
     public static var fullScreen: AnyPresentationType {
         AnyPresentationType(
-            make: { content, _ in
+            make: { content, _ -> UIViewController in
                 let vc = UIHostingController(rootView: content)
                 vc.modalPresentationStyle = .fullScreen
                 return vc

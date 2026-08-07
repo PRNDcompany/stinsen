@@ -61,8 +61,16 @@ struct TestbedEnvironmentObjectScreen: View {
     ///  - Imperative routes mint a fresh id every call, so the "same route twice in a
     ///    row is dropped" behaviour (L1) does not apply. Push → Push needs no second
     ///    declared route to work.
-    ///  - ...which also means imperative routes have **no double-tap protection at
-    ///    all** today. The serial queue in stage 3 is what has to provide it.
+    ///  - ...which also means imperative routes have **no double-tap protection**. The
+    ///    host serialises transitions but does not coalesce them, so a double tap
+    ///    produces two screens — exactly as in plain UIKit, where debouncing is the
+    ///    app's job.
+    ///
+    /// **Buttons are only ever appended, never inserted.** Reaching one that sits below
+    /// the fold means scrolling first, and a screen that is scrolled when a custom
+    /// containment presentation attaches to it puts that presentation's own controls out
+    /// of reach. Moving an existing button down therefore breaks tests that have nothing
+    /// to do with it — measured, not theorised.
     private var combos: [(id: String, title: String, action: () -> Void)] {
         [
             ("PopThenPush", "Pop → Push", {
@@ -203,6 +211,18 @@ struct TestbedEnvironmentObjectScreen: View {
                     )
                 }
                 .accessibilityIdentifier("ShowCustomOverlay")
+
+                // A screen with no SwiftUI in it. Routed to exactly like any other, which
+                // is the property being demonstrated.
+                RoundedButton("UIKit screen") {
+                    coordinator.route(.push, to: coordinator.makeUIKitScreen())
+                }
+                .accessibilityIdentifier("ShowUIKitScreen")
+
+                RoundedButton("UIKit screen (modal)") {
+                    coordinator.route(.modal, to: coordinator.makeUIKitScreen())
+                }
+                .accessibilityIdentifier("ShowUIKitModal")
 
                 Divider().padding(.vertical, 8)
 

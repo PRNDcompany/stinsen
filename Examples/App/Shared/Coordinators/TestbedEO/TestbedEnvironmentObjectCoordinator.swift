@@ -73,6 +73,12 @@ final class TestbedEnvironmentObjectCoordinator: NavigationCoordinatable {
         NavigationView { makeScreen() }
     }
 
+    /// A screen that is a plain `UIViewController`, built the way a UIKit app builds one.
+    @MainActor
+    func makeUIKitScreen() -> UIViewController {
+        UIKitTestbedViewController(coordinator: self, serial: nextScreenSerial())
+    }
+
     /// Every screen gets a number, so UI tests can tell *which* screen is on top.
     /// Without it every testbed screen looks identical to XCUITest and "did the push
     /// actually happen" is unanswerable.

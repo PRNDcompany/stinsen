@@ -50,7 +50,7 @@ struct RouteRecord {
     /// The value the route was created with, as `focusFirst`'s comparator will see it.
     let input: Any?
 
-    let content: StackItemContent
+    let content: Screen
     let presentation: AnyPresentationType
 
     /// Runs when this screen goes away, exactly once, whichever path removed it.
@@ -68,10 +68,7 @@ struct RouteRecord {
     /// `dismissCoordinator()` silently never matches.
     let childObject: AnyObject?
 
-    var child: (any Coordinatable)? {
-        guard case .coordinator(let coordinator) = content else { return nil }
-        return coordinator
-    }
+    var child: (any Coordinatable)? { content.coordinatorValue }
 
     var kind: PresentationKind { presentation.kind }
 

@@ -291,17 +291,12 @@ final class NavigationHost {
         }
 
         let record = records[index]
-        let content: AnyView
-        switch record.content {
-        case .view(let view):
-            content = view
-        case .coordinator(let coordinator):
-            content = coordinator.view()
-        }
 
         warnIfPushIsImpossible(record, context: context)
 
-        let viewController = record.presentation.makeViewController(content: content)
+        // A view controller the app supplied is presented as it is; only SwiftUI content
+        // is built into one.
+        let viewController = record.content.makeViewController(using: record.presentation)
         ScreenProbe.attach(to: viewController, route: record.route, receiver: self)
 
         records[index].viewController = viewController

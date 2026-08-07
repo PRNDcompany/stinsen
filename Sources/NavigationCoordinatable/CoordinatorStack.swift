@@ -75,14 +75,15 @@ public extension CoordinatorStack {
     }
 }
 
-/// Preserves compile-time type information from route methods.
-/// Route methods know whether Output is View or Coordinatable via generics —
-/// this enum carries that distinction through the stack instead of erasing it to ViewPresentable.
-@MainActor
-public enum StackItemContent {
-    case view(AnyView)
-    case coordinator(any Coordinatable)
-}
+/// What a route produced, carried through the stack without being erased.
+///
+/// Renamed to `Screen` — it says what the value is rather than where it is stored, and
+/// the same type now answers for a stack entry, a root, and a tab. See
+/// `Sources/Core/Screen.swift`.
+///
+/// - Note: `Screen` gained a `.viewController` case so that a `UIViewController` can be
+///   a screen. Code that switches over this exhaustively needs a branch for it.
+public typealias StackItemContent = Screen
 
 // MARK: - Deprecated
 

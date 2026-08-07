@@ -59,24 +59,15 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
     }
 
     public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented? {
-        switch content {
-        case .view(let view):
-            // The view is presented as it is. It used to be wrapped in another
-            // `NavigationCoordinatableView` carrying `nextId`, whose only job was to
-            // introspect its way to a view controller so *the next* level could be
-            // presented from it. `NavigationHost` owns every level now, so there is
-            // nothing left for the wrapper to do — and `nextId` names a position that
-            // no longer exists.
-            return ViewControllerPresented(
-                viewController: makeViewController(content: view),
-                presentationType: self
-            )
-        case .coordinator(let c):
-            return ViewControllerPresented(
-                viewController: makeViewController(content: c.view()),
-                presentationType: self
-            )
-        }
+        // The content is turned into a view controller as it is. It used to be wrapped in
+        // another `NavigationCoordinatableView` carrying `nextId`, whose only job was to
+        // introspect its way to a view controller so *the next* level could be presented
+        // from it. `NavigationHost` owns every level now, so there is nothing left for
+        // the wrapper to do — and `nextId` names a position that no longer exists.
+        ViewControllerPresented(
+            viewController: content.makeViewController(using: AnyPresentationType(self)),
+            presentationType: self
+        )
     }
 
     public func makeViewController<Content>(content: Content) -> UIViewController where Content : View {

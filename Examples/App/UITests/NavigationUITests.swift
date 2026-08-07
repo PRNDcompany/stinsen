@@ -579,6 +579,73 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(screen(1).exists, "back to the parent's root")
     }
 
+    // MARK: - UIKit screens
+
+    /// A plain `UIViewController` routed to like any other screen.
+    ///
+    /// The transition engine has been UIKit's for a while, but every screen still had to
+    /// be a SwiftUI view: `route(_:to:)` took a `View`, and the built-in presentations
+    /// were typed to the hosting controller they built, so an app-supplied view
+    /// controller could not get through at all.
+    func testUIKitScreen_pushesAndPops() {
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "a UIKit screen must push like any other")
+        XCTAssertTrue(app.staticTexts["ScreenKind"].exists,
+                      "the pushed screen should be the UIKit one")
+
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "popLast() must pop a UIKit screen")
+        XCTAssertTrue(screen(1).exists, "back to the SwiftUI root")
+    }
+
+    func testUIKitScreen_presentsAsModal() {
+        tapButton("ShowUIKitModal")
+        assertAppears(2, "a UIKit screen must present like any other")
+
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "popLast() must dismiss a UIKit modal")
+    }
+
+    /// A chain that alternates runtimes.
+    ///
+    /// A stack whose screens are all one kind proves much less: what matters is that the
+    /// host reads the hierarchy the same way regardless of what built each screen, since
+    /// its liveness check, its presentation context and its unwind all work on view
+    /// controllers and never ask which runtime produced them.
+    func testMixedRuntimeChain_unwindsInOneGo() {
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "UIKit screen")
+
+        tapButton("UIKitPushSwiftUI")
+        assertAppears(3, "SwiftUI screen pushed from a UIKit one")
+
+        tapButton("ShowUIKitScreen")
+        assertAppears(4, "UIKit screen pushed from a SwiftUI one")
+
+        tapButton("UIKitPopToRoot")
+        assertDisappears(4, "popToRoot must clear the whole mixed chain")
+        assertDisappears(3, "…including the SwiftUI screen in the middle")
+        assertDisappears(2, "…and the UIKit one at the bottom")
+        XCTAssertTrue(screen(1).exists, "root screen must be back")
+    }
+
+    /// A UIKit screen reports its lifecycle like any other.
+    ///
+    /// Nothing was added to the view controller to make this work — the probe is a child
+    /// view controller, and UIKit forwards appearance callbacks to children by default.
+    func testUIKitScreen_reportsLifecycle() {
+        tapButton("ResetLifecycleLog")
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "UIKit screen")
+
+        // Sampling needs a SwiftUI testbed screen, so go back to one first.
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "back to the SwiftUI root")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "a popped UIKit screen must be reported as .popped, got: \(currentLifecycleTrail())")
+    }
+
     // MARK: - A coordinator embedded as a child view
 
     /// `VStack { Text("…"); ChildCoordinator().view() }` — a coordinator dropped into an
