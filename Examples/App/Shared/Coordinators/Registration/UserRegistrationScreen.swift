@@ -3,8 +3,10 @@ import SwiftUI
 import Stinsen
 
 struct UserRegistrationScreen: View {
-    @EnvironmentObject private var registrationRouter: RegistrationCoordinator.Router
     @State private var text: String = ""
+
+    /// Supplied by the coordinator — see `RegistrationCoordinator+Factory`.
+    private let onNext: (String) -> Void
 
     @ViewBuilder var body: some View {
         ScrollView {
@@ -12,16 +14,20 @@ struct UserRegistrationScreen: View {
             RoundedTextField("Desired username", text: $text)
             Spacer(minLength: 32)
             RoundedButton("Next step", style: .primary) {
-                registrationRouter.route(to: \.password, text)
+                onNext(text)
             }
         }
         .navigationTitle(with: "Register user")
+    }
+
+    init(onNext: @escaping (String) -> Void) {
+        self.onNext = onNext
     }
 }
 
 struct UserRegistrationScreen_Previews: PreviewProvider {
     static var previews: some View {
-        UserRegistrationScreen()
+        UserRegistrationScreen(onNext: { _ in })
     }
 }
 

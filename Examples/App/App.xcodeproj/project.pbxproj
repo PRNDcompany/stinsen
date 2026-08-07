@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4D9B5F313DE083EFF0534120 /* NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8754C67C2A41A60778F37CE /* NavigationUITests.swift */; };
 		EB24976426C9192200A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976326C9192200A4C2D4 /* Stinsen */; };
 		EB24976626C9192800A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976526C9192800A4C2D4 /* Stinsen */; };
 		EB24976A26C9193500A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976926C9193500A4C2D4 /* Stinsen */; };
@@ -184,9 +185,17 @@
 		EB428555272AA22900911C54 /* Main.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB42843D272AA20100911C54 /* Main.swift */; };
 		EB9E366B25E4DC1200C4E25C /* StinsenApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = EB9E366A25E4DC1200C4E25C /* StinsenApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EB9E367725E4DC1300C4E25C /* StinsenApp.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EB9E367625E4DC1300C4E25C /* StinsenApp.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F38FC8AEA473948189BB0E18 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E10B6CC143980ABA32182438 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0A08CD48AE12F3D4918F8D97 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EBC24EE425AC62FF00F455F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EBC24EEF25AC630300F455F3;
+			remoteInfo = "StinsenApp (iOS)";
+		};
 		EB9E366C25E4DC1200C4E25C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = EBC24EE425AC62FF00F455F3 /* Project object */;
@@ -229,6 +238,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AE6FE772C641B9ACEE38F536 /* StinsenAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StinsenAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8754C67C2A41A60778F37CE /* NavigationUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NavigationUITests.swift; sourceTree = "<group>"; };
+		E10B6CC143980ABA32182438 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		EB235D2225E8D502008BEE0A /* Stinsen.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Stinsen.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB42842E272AA20100911C54 /* Main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Main.swift; sourceTree = "<group>"; };
 		EB42842F272AA20100911C54 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -300,6 +312,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		8C0BF29DA9F8B6A99B3771D2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F38FC8AEA473948189BB0E18 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EB6B0F5B25DB03F60011E826 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -342,6 +362,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B70AEC15F4018D3F9B1391FC /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				E10B6CC143980ABA32182438 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		EB42842D272AA20100911C54 /* tvOS */ = {
 			isa = PBXGroup;
 			children = (
@@ -625,6 +653,7 @@
 				EB428434272AA20100911C54 /* watchOS */,
 				EBC24EF125AC630300F455F3 /* Products */,
 				EBE38ED925DFD13F00962D95 /* Frameworks */,
+				F426A8FF063C7BB73F9A9783 /* UITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -637,6 +666,7 @@
 				EB9E366725E4DC1200C4E25C /* StinsenApp.app */,
 				EB9E366A25E4DC1200C4E25C /* StinsenApp.app */,
 				EB9E367625E4DC1300C4E25C /* StinsenApp.appex */,
+				AE6FE772C641B9ACEE38F536 /* StinsenAppUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -652,13 +682,41 @@
 				EBC4E62925E4E13100C7D645 /* Stinsen.framework */,
 				EBC4E62625E4E12C00C7D645 /* Stinsen.framework */,
 				EBC4E62125E4E12700C7D645 /* Stinsen.framework */,
+				B70AEC15F4018D3F9B1391FC /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		F426A8FF063C7BB73F9A9783 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				C8754C67C2A41A60778F37CE /* NavigationUITests.swift */,
+			);
+			name = UITests;
+			path = UITests;
+			sourceTree = SOURCE_ROOT;
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0FF70BC3696EE49ADEC6927F /* StinsenAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A2B37C6C65047348C23D8A9 /* Build configuration list for PBXNativeTarget "StinsenAppUITests" */;
+			buildPhases = (
+				B63C145484401C4F22E6B7A2 /* Sources */,
+				8C0BF29DA9F8B6A99B3771D2 /* Frameworks */,
+				D80475FB3EC30E8DB1C15EAF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ACE5FA7D85C874E7936EA34F /* PBXTargetDependency */,
+			);
+			name = StinsenAppUITests;
+			productName = StinsenAppUITests;
+			productReference = AE6FE772C641B9ACEE38F536 /* StinsenAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		EB6B0F5D25DB03F60011E826 /* StinsenApp (tvOS) */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = EB6B0F6A25DB03F70011E826 /* Build configuration list for PBXNativeTarget "StinsenApp (tvOS)" */;
@@ -692,8 +750,6 @@
 				EB9E366D25E4DC1200C4E25C /* PBXTargetDependency */,
 			);
 			name = "StinsenApp (watchOS)";
-			packageProductDependencies = (
-			);
 			productName = StinsenApp;
 			productReference = EB9E366725E4DC1200C4E25C /* StinsenApp.app */;
 			productType = "com.apple.product-type.application.watchapp2-container";
@@ -712,8 +768,6 @@
 				EB9E367925E4DC1300C4E25C /* PBXTargetDependency */,
 			);
 			name = "StinsenApp (watchOS App)";
-			packageProductDependencies = (
-			);
 			productName = "StinsenApp WatchKit App";
 			productReference = EB9E366A25E4DC1200C4E25C /* StinsenApp.app */;
 			productType = "com.apple.product-type.application.watchapp2";
@@ -818,8 +872,6 @@
 				Base,
 			);
 			mainGroup = EBC24EE325AC62FF00F455F3;
-			packageReferences = (
-			);
 			productRefGroup = EBC24EF125AC630300F455F3 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -830,11 +882,19 @@
 				EB9E366625E4DC1200C4E25C /* StinsenApp (watchOS) */,
 				EB9E366925E4DC1200C4E25C /* StinsenApp (watchOS App) */,
 				EB9E367525E4DC1300C4E25C /* StinsenApp (watchOS Extension) */,
+				0FF70BC3696EE49ADEC6927F /* StinsenAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		D80475FB3EC30E8DB1C15EAF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EB6B0F5C25DB03F60011E826 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -886,6 +946,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B63C145484401C4F22E6B7A2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D9B5F313DE083EFF0534120 /* NavigationUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EB6B0F5A25DB03F60011E826 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1082,6 +1150,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		ACE5FA7D85C874E7936EA34F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "StinsenApp (iOS)";
+			target = EBC24EEF25AC630300F455F3 /* StinsenApp (iOS) */;
+			targetProxy = 0A08CD48AE12F3D4918F8D97 /* PBXContainerItemProxy */;
+		};
 		EB9E366D25E4DC1200C4E25C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = EB9E366925E4DC1200C4E25C /* StinsenApp (watchOS App) */;
@@ -1095,6 +1169,41 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		3BACB2307ECB90337C0DDD6E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stinsen.StinsenAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "StinsenApp (iOS)";
+			};
+			name = Debug;
+		};
+		8EED091F4EFBAB71D64A39B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stinsen.StinsenAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "StinsenApp (iOS)";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		EB6B0F6B25DB03F70011E826 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1392,7 +1501,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1418,7 +1527,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1487,6 +1596,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0A2B37C6C65047348C23D8A9 /* Build configuration list for PBXNativeTarget "StinsenAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8EED091F4EFBAB71D64A39B9 /* Release */,
+				3BACB2307ECB90337C0DDD6E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		EB6B0F6A25DB03F70011E826 /* Build configuration list for PBXNativeTarget "StinsenApp (tvOS)" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

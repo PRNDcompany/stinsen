@@ -34,7 +34,11 @@ final class MainCoordinator: NavigationCoordinatable {
         #elseif os(iOS)
             if #available(iOS 14.0, *) {
                 sharedView(view).onOpenURL(perform: { url in
-                    if let coordinator = self.hasRoot(\.authenticated) {
+                    // Root coordinator routes are erased to AnyCoordinator so that
+                    // factories can return `some Coordinatable`; unwrap to get back to
+                    // AuthenticatedCoordinator's own API (todosStore, focusFirst).
+                    if let coordinator = self.hasRoot(\.authenticated)?
+                        .unwrap(AuthenticatedCoordinator.self) {
                         do {
                             let deepLink = try DeepLink(url: url, todosStore: coordinator.todosStore)
                             

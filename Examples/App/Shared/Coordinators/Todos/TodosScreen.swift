@@ -4,11 +4,14 @@ import Stinsen
 
 struct TodosScreen: View {
     @ObservedObject private var todosStore: TodosStore
-    @EnvironmentObject private var todosRouter: TodosCoordinator.Router
-    
+
+    /// Supplied by the coordinator — see `TodosCoordinator+Factory`.
+    private let onCreateTodo: () -> Void
+    private let onSelectTodo: (UUID) -> Void
+
     @ViewBuilder var button: some View {
         Button(action: {
-            todosRouter.route(to: \.createTodo)
+            onCreateTodo()
         }, label: {
             Image(systemName: "folder.badge.plus")
         })
@@ -25,7 +28,7 @@ struct TodosScreen: View {
             VStack {
                 ForEach(todosStore.all) { todo in
                     Button(todo.name, action: {
-                        todosRouter.route(to: \.todo, todo.id)
+                        onSelectTodo(todo.id)
                     })
                 }
             }
@@ -45,13 +48,23 @@ struct TodosScreen: View {
         #endif
     }
     
-    init(todosStore: TodosStore) {
+    init(
+        todosStore: TodosStore,
+        onCreateTodo: @escaping () -> Void,
+        onSelectTodo: @escaping (UUID) -> Void
+    ) {
         self.todosStore = todosStore
+        self.onCreateTodo = onCreateTodo
+        self.onSelectTodo = onSelectTodo
     }
 }
 
 struct TodosScreen_Previews: PreviewProvider {
     static var previews: some View {
-        TodosScreen(todosStore: TodosStore(user: User(username: "user@example.com", accessToken: UUID().uuidString)))
+        TodosScreen(
+            todosStore: TodosStore(user: User(username: "user@example.com", accessToken: UUID().uuidString)),
+            onCreateTodo: {},
+            onSelectTodo: { _ in }
+        )
     }
 }
