@@ -319,6 +319,16 @@ public extension NavigationCoordinatable {
         return AnyView(NavigationCoordinatableView(coordinator: self))
     }
 
+    // `viewController()` is inherited: it hosts `view()`, so the root is rendered by
+    // SwiftUI either way and `customize(_:)` — which is a SwiftUI modifier — keeps
+    // applying. The cost is a root that is *itself* a `UIViewController` going through a
+    // representable and a hosting controller to get there.
+    //
+    // Removing those two layers means a container that adds the root as a direct child
+    // view controller, and then `customize(_:)` has nothing to wrap. That is a real
+    // decision about what `customize` means for a UIKit root, not a detail to slip in
+    // alongside something else.
+
     /// The coordinator wrapped in a navigation controller, ready to be a window's root.
     ///
     /// ```swift
@@ -667,12 +677,28 @@ public extension NavigationCoordinatable {
         try self._focusFirst(route, nil)
     }
     
+    /// Closes everything the outgoing root had open.
+    ///
+    /// A root switch ends a flow — signing out, finishing onboarding — and the screens on
+    /// top belonged to it. They used to be left exactly where they were: the root
+    /// underneath changed while the user went on looking at screens from the flow that
+    /// had just ended, and the coordinator's records went on describing them, so every
+    /// later pop was computed against screens that should no longer have existed.
+    ///
+    /// Not animated. The root change is the visual event; animating the screens away as
+    /// well interleaves two transitions to say one thing.
+    private func unwindForRootSwitch() {
+        host.reconcile()
+        host.unwind(keepingFirst: 0, animated: false)
+    }
+
     @discardableResult private func _root<Output: Coordinatable, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         input: Input? = nil,
         animation: Animation? = nil
     ) -> Output {
         let output: Output = _createRouteOutput(route, input: input)
+        unwindForRootSwitch()
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: output)
         let rootSwitch = self[keyPath: route].type
         stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
@@ -685,7 +711,21 @@ public extension NavigationCoordinatable {
         animation: Animation? = nil
     ) -> Self {
         let output: Output = _createRouteOutput(route, input: input)
+        unwindForRootSwitch()
         let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: AnyView(output))
+        let rootSwitch = self[keyPath: route].type
+        stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
+        return self
+    }
+
+    @discardableResult private func _root<Input>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Screen>>,
+        input: Input? = nil,
+        animation: Animation? = nil
+    ) -> Self {
+        let output: Screen = _createRouteOutput(route, input: input)
+        unwindForRootSwitch()
+        let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: output)
         let rootSwitch = self[keyPath: route].type
         stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return self
@@ -767,6 +807,48 @@ public extension NavigationCoordinatable {
         _ input: Input
     ) -> Self {
         self._root(route, input: input)
+    }
+
+    // MARK: - View controller roots
+    //
+    // Declared in the extension rather than added to the protocol: a new requirement
+    // would have to be satisfied by every existing conformer, and nothing here needs
+    // dynamic dispatch.
+
+    /// Switches to a root that is a plain `UIViewController`.
+    @discardableResult func root(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Screen>>
+    ) -> Self {
+        self._root(route)
+    }
+
+    @discardableResult func root<Input>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Screen>>,
+        _ input: Input
+    ) -> Self {
+        self._root(route, input: input)
+    }
+
+    @discardableResult func root(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Screen>>,
+        animation: Animation?
+    ) -> Self {
+        self._root(route, animation: animation)
+    }
+
+    @discardableResult func root<Input>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Screen>>,
+        _ input: Input,
+        animation: Animation?
+    ) -> Self {
+        self._root(route, input: input, animation: animation)
+    }
+
+    /// Whether the given view controller route is the one currently rooted.
+    func hasRoot<Input>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Screen>>
+    ) -> Bool {
+        stack.root?.activeSlot?.item.keyPath == route.hashValue
     }
 
     // MARK: - Animation overloads (call-site animation, default params not allowed in protocol)

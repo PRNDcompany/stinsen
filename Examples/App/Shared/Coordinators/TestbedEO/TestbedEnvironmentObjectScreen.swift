@@ -224,6 +224,18 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("ShowUIKitModal")
 
+                // Switching root while screens are pushed. Appended, never inserted —
+                // see the note on `combos`.
+                RoundedButton("Switch root") {
+                    coordinator.root(\.alternateStart)
+                }
+                .accessibilityIdentifier("SwitchRoot")
+
+                RoundedButton("Switch to UIKit root") {
+                    coordinator.root(\.uikitStart)
+                }
+                .accessibilityIdentifier("SwitchToUIKitRoot")
+
                 Divider().padding(.vertical, 8)
 
                 // MARK: Refactor verification scenarios

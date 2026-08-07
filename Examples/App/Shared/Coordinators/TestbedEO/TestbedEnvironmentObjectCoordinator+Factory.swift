@@ -38,6 +38,33 @@ extension TestbedEnvironmentObjectCoordinator {
     @ViewBuilder func makeStart() -> some View {
         TestbedEnvironmentObjectScreen(coordinator: self, serial: nextScreenSerial())
     }
+
+    /// A root built the way a UIKit app builds one — no SwiftUI anywhere in it.
+    func makeUIKitStart() -> UIViewController {
+        let controller = UIViewController()
+        controller.view.backgroundColor = .systemBackground
+
+        let label = UILabel()
+        label.text = "UIKit root"
+        label.accessibilityIdentifier = "UIKitRoot"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        controller.view.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: controller.view.centerXAnchor),
+            label.topAnchor.constraint(equalTo: controller.view.safeAreaLayoutGuide.topAnchor, constant: 40),
+        ])
+        return controller
+    }
+
+    /// Deliberately not a testbed screen: it carries none of the shared identifiers, so
+    /// "did the root actually change" is answerable without disambiguating anything.
+    @ViewBuilder func makeAlternateStart() -> some View {
+        VStack {
+            Text("Alternate root")
+                .accessibilityIdentifier("AlternateRoot")
+        }
+    }
 }
 
 /// Embeds a coordinator's screens inside an ordinary SwiftUI hierarchy.

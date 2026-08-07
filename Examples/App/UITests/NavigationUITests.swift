@@ -591,6 +591,41 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(screen(1).exists, "back to the parent's root")
     }
 
+    // MARK: - Root switching
+
+    /// Switching root has to take the open screens with it.
+    ///
+    /// A root switch is a flow-level change — signing out, finishing onboarding — and the
+    /// screens the user had open belong to the flow that is ending. Leaving them up means
+    /// the coordinator's records describe screens from a root that no longer exists, and
+    /// every later pop is computed against them.
+    func testRootSwitch_removesScreensFromTheOldRoot() {
+        tapButton("ShowPush")
+        assertAppears(2, "a screen is open when the root changes")
+
+        tapButton("SwitchRoot")
+
+        // In this order on purpose: a covered root is not in the accessibility tree at
+        // all, so "did the root change" is unanswerable until the screen above it is
+        // gone. The screen going away is also the thing being tested.
+        assertDisappears(2, "switching root must take the pushed screen with it")
+        XCTAssertTrue(app.staticTexts["AlternateRoot"].waitForExistence(timeout: 5),
+                      "the new root must be what is left")
+    }
+
+    /// A root declared as a plain `UIViewController`.
+    ///
+    /// `@Root var uikitStart = makeUIKitStart` where the factory returns a view
+    /// controller: the whole flow can now be UIKit from the root down, with no SwiftUI
+    /// view anywhere in it.
+    func testRootSwitch_toAUIKitRoot() {
+        tapButton("SwitchToUIKitRoot")
+
+        XCTAssertTrue(app.staticTexts["UIKitRoot"].waitForExistence(timeout: 5),
+                      "a view controller must be able to be the root")
+        assertDisappears(1, "the SwiftUI root it replaced must be gone")
+    }
+
     // MARK: - UIKit screens
 
     /// A plain `UIViewController` routed to like any other screen.

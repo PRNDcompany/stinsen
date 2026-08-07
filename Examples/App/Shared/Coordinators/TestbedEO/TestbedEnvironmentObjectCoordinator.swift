@@ -8,6 +8,15 @@ final class TestbedEnvironmentObjectCoordinator: NavigationCoordinatable {
 
     @Root var start = makeStart
 
+    /// A second root, so root switching can be exercised while screens are pushed.
+    /// Switching root is a flow-level change — signing out, finishing onboarding — and
+    /// what happens to the screens the user had open is the question.
+    @Root var alternateStart = makeAlternateStart
+
+    /// A root that is a plain `UIViewController` — what an app whose screens are UIKit
+    /// would declare.
+    @Root var uikitStart = makeUIKitStart
+
     @Route(.modal) var modalScreen = makeModalScreen
     @Route(.push) var pushScreen = makePushScreen
     @Route(.modal) var modalCoordinator = makeModalCoordinator

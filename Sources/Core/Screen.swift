@@ -73,6 +73,32 @@ public enum Screen {
     }
 }
 
+/// Lets a `Screen` stand where a route's output stands.
+///
+/// This is what makes `@Root var login = makeLoginViewController` type-check: a route's
+/// output has to be `ViewPresentable`, and a bare `UIViewController` is not one — and
+/// making it one would mean a retroactive conformance on a UIKit type, which a library
+/// has no business adding.
+extension Screen: ViewPresentable {
+    public func view() -> AnyView { makeView() }
+
+    /// The screen as a view controller, with no presentation to build it.
+    ///
+    /// Distinct from `makeViewController(using:)`: that one exists for routing, where a
+    /// custom presentation may want to supply the container. A root has no presentation
+    /// — it is not being put on top of anything.
+    public func viewController() -> UIViewController {
+        switch self {
+        case .view(let view):
+            return UIHostingController(rootView: view)
+        case .coordinator(let coordinator):
+            return coordinator.viewController()
+        case .viewController(let viewController):
+            return viewController
+        }
+    }
+}
+
 /// Places an existing view controller into a SwiftUI hierarchy.
 ///
 /// Deliberately not a factory: the view controller is the app's, already built, and
