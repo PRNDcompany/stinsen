@@ -79,17 +79,26 @@ final class UIKitPresentationReentryTests: XCTestCase {
         wait(for: [expectation], timeout: 0.5)
     }
 
-    func testOnDismissedNotCalledDuringPresent() {
-        // Given
+    /// Presenting plants nothing on the content view controller.
+    ///
+    /// `onDismissed` used to be driven by an associated object whose `deinit` fired it —
+    /// which meant every presented screen carried a hidden passenger, and the callback
+    /// arrived whenever ARC felt like it, in no order, and not at all if anything still
+    /// held the view controller. Disappearance is observed by `ScreenProbe` and
+    /// re-derived by `reconcile()` now, so nothing needs planting.
+    ///
+    /// This matters beyond tidiness: once an app can hand its *own* view controller in as
+    /// a screen, attaching hidden state to it is attaching it to someone else's object.
+    func testPresentingDoesNotAttachAnythingToTheContentViewController() {
         let presentation = UIKitPresentation(
             make: { content, _ in UIHostingController(rootView: content) },
             present: { _, _ in }
         )
-        // Use makeViewController to get the correct ViewController type (UIHostingController<AnyView>)
         let content = presentation.makeViewController(content: Text("Test"))
+
+        let childrenBefore = content.children.count
         var onDismissedCalled = false
 
-        // When
         presentation.presented(
             parent: parentViewController,
             content: content,
@@ -97,18 +106,16 @@ final class UIKitPresentationReentryTests: XCTestCase {
             onDismissed: { onDismissedCalled = true }
         )
 
-        // Wait to ensure onDismissed is not called
-        let expectation = XCTestExpectation(description: "Wait for potential onDismissed")
-        expectation.isInverted = true
+        XCTAssertEqual(content.children.count, childrenBefore,
+                       "presenting must not add anything to the content view controller")
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            if onDismissedCalled {
-                expectation.fulfill()
-            }
-        }
-
-        wait(for: [expectation], timeout: 0.5)
-        XCTAssertFalse(onDismissedCalled, "onDismissed should not be called during present")
+        // The callback is never invoked by a built-in presentation. Released here so the
+        // assertion is about the contract rather than about timing.
+        let settled = XCTestExpectation(description: "settle")
+        settled.isInverted = true
+        wait(for: [settled], timeout: 0.3)
+        XCTAssertFalse(onDismissedCalled,
+                       "disappearance is reported by the probe, not by this callback")
     }
 
     func testMakeViewControllerCreatesCorrectType() {

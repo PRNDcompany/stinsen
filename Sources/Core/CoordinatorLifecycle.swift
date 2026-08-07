@@ -2,10 +2,11 @@ import UIKit
 
 /// Why a screen went away.
 ///
-/// Today none of this is available: dismissal is inferred from `LifecycleObject.deinit`,
-/// which fires whenever ARC gets around to releasing the view controller. That tells you
-/// *that* a screen is gone, long after the fact, and never tells you why — "the user
-/// swiped back", "we popped it", and "a modal covered it" are indistinguishable.
+/// None of this used to be available. Dismissal was inferred from the `deinit` of an
+/// object planted on the view controller, which fired whenever ARC got around to
+/// releasing it: that told you *that* a screen was gone, long after the fact, and never
+/// why — "the user swiped back", "we popped it" and "a modal covered it" were
+/// indistinguishable.
 public enum ScreenDisappearReason: Hashable, Sendable {
     /// Popped off a navigation stack — back button, back swipe, or a programmatic pop.
     case popped

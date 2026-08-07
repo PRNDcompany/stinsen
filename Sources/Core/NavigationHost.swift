@@ -317,10 +317,11 @@ final class NavigationHost {
             parent: context,
             content: viewController,
             onAppeared: { [weak self] in self?.markLive(id) },
-            // Fires from the view controller's deallocation. Late, unordered and not
-            // guaranteed at all — which is why it is a safety net here rather than the
-            // mechanism. Reconciling asks UIKit, so a signal that never arrives costs
-            // nothing beyond the delay until the next operation.
+            // The built-in presentations no longer call this, and a custom one is not
+            // required to. Disappearance is observed by the probe and re-derived by
+            // `reconcile()`; a callback that may never arrive is not something to build
+            // on. Wired to a reconcile anyway so a presentation that *does* call it is
+            // not simply ignored.
             onDismissed: { [weak self] in self?.reconcile() }
         )
         beginTransition(endingWhen: viewController)

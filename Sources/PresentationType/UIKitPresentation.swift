@@ -89,64 +89,43 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
         return viewController
     }
 
+    /// - Parameter onDismissed: no longer called. Disappearance is observed rather than
+    ///   inferred — see the note below. Kept in the signature because it is a public
+    ///   protocol requirement and removing it would break every conformer.
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {
-        
-        // Handle re-entry: clear existing lifecycleObject if present
-        if content.lifecycleObject != nil {
-            content.lifecycleObject = nil
-        }
-
-        let lifecycleObject = LifecycleObject()
-        
-        // Only call onDismissed when the view controller is actually being deallocated
-        lifecycleObject.onDeinit = {
-            onDismissed()
-        }
-
-        content.lifecycleObject = lifecycleObject
+        // `onDismissed` used to be driven by an associated object whose `deinit` fired
+        // it. That was the only way to notice a screen going away before the coordinator
+        // could ask UIKit — but it depended on ARC: it arrived whenever the view
+        // controller was finally released, in no particular order, and never at all if
+        // anything still retained it. `ScreenProbe` reports the disappearance with a
+        // reason, and `reconcile()` re-derives from UIKit on every operation, so nothing
+        // is left for it to do.
+        //
+        // It also planted a hidden object on a view controller the app may own, which
+        // stops being defensible the moment app-supplied view controllers can be screens.
         guard let typedContent = content as? ViewController else {
-            assertionFailure("UIKitPresentation: expected \(ViewController.self), got \(type(of: content))")
+            assertionFailure("""
+                Stinsen: this presentation can only present \(ViewController.self), but \
+                it was given \(type(of: content)). A presentation built with \
+                `AnyPresentationType(make:present:)` is typed to whatever `make` returns, \
+                so it cannot be used to present a view controller of another type.
+                """)
             return
         }
         presentHandler(
             parent,
             typedContent
         )
-        
-        // Call onAppeared after presentation completes
-        // Note: The appear() function has been fixed to not trigger unwanted popTo() calls
+
+        // A run loop hop, not a transition completion — the accurate signal is the
+        // screen's own `viewDidAppear`, which `NavigationHost` observes through its probe.
         DispatchQueue.main.async {
             onAppeared()
         }
     }
 
     public func dismissed(viewController: UIViewController) {
-        // Clear lifecycleObject to ensure clean state for re-entry
-        viewController.lifecycleObject = nil
-        
-        // NOTE: We need to ensure the stack is properly cleaned up when dismissing
-        // The dismissHandler should handle the UI dismissal, but the stack cleanup
-        // should be handled by the coordinator through the onDismissed callback
         dismissHandler(viewController)
     }
 
-}
-
-// MARK: - private
-private enum MapTables {
-    static let lifecycle = WeakMapTable<UIViewController, Any>()
-}
-
-private nonisolated final class LifecycleObject {
-    var onDeinit: (() -> Void)?
-    deinit {
-        onDeinit?()
-    }
-}
-
-private extension UIViewController {
-    var lifecycleObject: LifecycleObject? {
-        get { MapTables.lifecycle.value(forKey: self) as? LifecycleObject }
-        set { MapTables.lifecycle.setValue(newValue, forKey: self) }
-    }
 }
