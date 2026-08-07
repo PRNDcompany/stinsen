@@ -236,6 +236,13 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("SwitchToUIKitRoot")
 
+                // A tab coordinator hosted as a real UITabBarController, presented like
+                // any other screen. Same TabChild state as the SwiftUI TabView rendering.
+                RoundedButton("UIKit tabs") {
+                    coordinator.route(.modal, to: TestbedTabCoordinator().viewController())
+                }
+                .accessibilityIdentifier("ShowUIKitTabs")
+
                 Divider().padding(.vertical, 8)
 
                 // MARK: Refactor verification scenarios

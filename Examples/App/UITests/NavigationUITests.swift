@@ -626,6 +626,28 @@ final class NavigationUITests: XCTestCase {
         assertDisappears(1, "the SwiftUI root it replaced must be gone")
     }
 
+    // MARK: - UIKit tabs
+
+    /// A tab coordinator hosted as a real `UITabBarController`.
+    ///
+    /// A UIKit app hosting a SwiftUI `TabView` gets a tab bar it cannot reach: no
+    /// `UITabBarItem` to configure, no delegate to hook. The same `TabChild` drives both
+    /// renderings, so `focusFirst`, `selectTab` and the re-tap callback are unchanged.
+    func testUIKitTabs_switchTabs() {
+        tapButton("ShowUIKitTabs")
+
+        XCTAssertTrue(app.staticTexts["TabOneContent"].waitForExistence(timeout: 5),
+                      "the tab bar controller should start on its first tab")
+
+        let secondTab = app.tabBars.buttons["Two"]
+        XCTAssertTrue(secondTab.waitForExistence(timeout: 5),
+                      "the UITabBarItem declared by the route must be what the tab bar shows")
+        secondTab.tap()
+
+        XCTAssertTrue(app.staticTexts["TabTwoContent"].waitForExistence(timeout: 5),
+                      "tapping a tab must switch the content")
+    }
+
     // MARK: - UIKit screens
 
     /// A plain `UIViewController` routed to like any other screen.

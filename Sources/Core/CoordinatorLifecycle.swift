@@ -172,21 +172,28 @@ final class ScreenProbe: UIViewController {
         return probe
     }
 
-    /// A container that turns off appearance forwarding makes this probe silent, and
-    /// the app would otherwise have no way to notice: no lifecycle events would simply
-    /// look like no navigation. Say so, rather than letting it be discovered later as
-    /// "the callbacks don't fire sometimes".
+    /// A container that turns off appearance forwarding makes this probe silent, and the
+    /// app would otherwise have no way to notice: no lifecycle events simply looks like
+    /// no navigation. Say so, rather than letting it be discovered later as "the
+    /// callbacks don't fire sometimes".
+    ///
+    /// A log rather than an assertion, because this is not always a mistake. Every UIKit
+    /// container — `UITabBarController`, `UINavigationController` — turns forwarding off
+    /// and decides for itself which child is appearing, which is correct behaviour and
+    /// exactly what a coordinator's own tab bar controller does. Trapping on it killed
+    /// the example app the first time a tab coordinator was presented as a screen.
+    ///
+    /// A container that wants to be observed can forward to its probes explicitly with
+    /// `beginAppearanceTransition` / `endAppearanceTransition`.
     private func warnIfSilent(host: UIViewController, route: RouteKey) {
         #if DEBUG
-        guard host.shouldAutomaticallyForwardAppearanceMethods else {
-            assertionFailure("""
-                Stinsen: \(type(of: host)) for route \(route) sets \
-                shouldAutomaticallyForwardAppearanceMethods = false, so lifecycle \
-                callbacks cannot be observed for it. Report them from the view \
-                controller itself, or leave forwarding on.
-                """)
-            return
-        }
+        guard !host.shouldAutomaticallyForwardAppearanceMethods else { return }
+        print("""
+            Stinsen: \(type(of: host)) for route \(route) does not forward appearance \
+            callbacks to its children, so lifecycle cannot be observed for it. Expected \
+            for a container view controller; if it is not one, leave forwarding on or \
+            report appearance from the view controller itself.
+            """)
         #endif
     }
 

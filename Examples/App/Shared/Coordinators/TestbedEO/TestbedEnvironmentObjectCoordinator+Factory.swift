@@ -188,3 +188,49 @@ final class UIKitTestbedViewController: UIViewController {
         return button
     }
 }
+
+/// A small tab coordinator, declared for **both** hosts.
+///
+/// Each tab carries a SwiftUI `tabItem:` and a `tabBarItem:`. Neither can be derived from
+/// the other — a SwiftUI view is not a `UITabBarItem` — so a coordinator that wants to be
+/// hostable either way says both, once.
+final class TestbedTabCoordinator: TabCoordinatable {
+    let child = TabChild(startingItems: [
+        \TestbedTabCoordinator.first,
+        \TestbedTabCoordinator.second,
+    ])
+
+    @Route(tabItem: makeFirstTab, tabBarItem: makeFirstTabBarItem)
+    var first = makeFirstScreen
+
+    @Route(tabItem: makeSecondTab, tabBarItem: makeSecondTabBarItem)
+    var second = makeSecondScreen
+
+    @ViewBuilder func makeFirstScreen() -> some View {
+        Text("Tab one").accessibilityIdentifier("TabOneContent")
+    }
+
+    @ViewBuilder func makeSecondScreen() -> some View {
+        Text("Tab two").accessibilityIdentifier("TabTwoContent")
+    }
+
+    @ViewBuilder func makeFirstTab(isActive: Bool) -> some View {
+        Text("One")
+    }
+
+    @ViewBuilder func makeSecondTab(isActive: Bool) -> some View {
+        Text("Two")
+    }
+
+    func makeFirstTabBarItem() -> UITabBarItem {
+        let item = UITabBarItem(title: "One", image: UIImage(systemName: "1.circle"), tag: 0)
+        item.accessibilityIdentifier = "TabOne"
+        return item
+    }
+
+    func makeSecondTabBarItem() -> UITabBarItem {
+        let item = UITabBarItem(title: "Two", image: UIImage(systemName: "2.circle"), tag: 1)
+        item.accessibilityIdentifier = "TabTwo"
+        return item
+    }
+}

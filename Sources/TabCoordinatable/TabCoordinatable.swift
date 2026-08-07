@@ -70,6 +70,9 @@ public extension TabCoordinatable {
                         tabItem: { [unowned self] in
                             val.tabItem(active: $0, coordinator: self)
                         },
+                        tabBarItem: { [unowned self] in
+                            val.tabBarItem(coordinator: self)
+                        },
                         onTapped: { isRepeat in
                             val.onTapped(isRepeat, coordinator: self)
                         }
@@ -93,6 +96,22 @@ public extension TabCoordinatable {
                 customize: customize
             )
         )
+    }
+
+    /// The tabs as a real `UITabBarController`.
+    ///
+    /// The same `TabChild` drives both this and the SwiftUI `TabView` from `view()`, so
+    /// `focusFirst`, `selectTab` and the re-tap callback behave identically either way.
+    ///
+    /// - Note: `customize(_:)` does **not** apply here. It is typed as a SwiftUI view
+    ///   modifier, and there is no SwiftUI view to modify — a `UITabBarController` is
+    ///   configured through its own properties. Anything a coordinator does in
+    ///   `customize` for a UIKit host belongs on the view controllers themselves.
+    func viewController() -> UIViewController {
+        if child.allItems == nil {
+            setupAllTabs()
+        }
+        return CoordinatorTabBarController(coordinator: self, child: child)
     }
 
     @discardableResult func focusFirst<Output: Coordinatable>(
@@ -155,6 +174,7 @@ public extension TabCoordinatable {
                 presentable: AnyView(view),
                 keyPathIsEqual: { _ in false },
                 tabItem: { AnyView(tabItem($0)) },
+                tabBarItem: { nil },
                 onTapped: { isRepeat in onTapped?(isRepeat) }
             )
         )
@@ -180,6 +200,61 @@ public extension TabCoordinatable {
                 presentable: coordinator,
                 keyPathIsEqual: { _ in false },
                 tabItem: { AnyView(tabItem($0)) },
+                tabBarItem: { nil },
+                onTapped: { isRepeat in onTapped?(isRepeat, coordinator) }
+            )
+        )
+
+        if child.allItems.count == 1 {
+            child.activeItem = child.allItems[0]
+        }
+
+        return coordinator
+    }
+
+    /// Adds a view as a tab, described for both hosts.
+    @discardableResult
+    func addTab<Content: View, TabItem: View>(
+        _ view: Content,
+        tabItem: @escaping (Bool) -> TabItem,
+        tabBarItem: @escaping () -> UITabBarItem,
+        onTapped: ((Bool) -> Void)? = nil
+    ) -> Self {
+        if child.allItems == nil { child.allItems = [] }
+
+        child.allItems.append(
+            TabChildItem(
+                presentable: AnyView(view),
+                keyPathIsEqual: { _ in false },
+                tabItem: { AnyView(tabItem($0)) },
+                tabBarItem: { tabBarItem() },
+                onTapped: { isRepeat in onTapped?(isRepeat) }
+            )
+        )
+
+        if child.allItems.count == 1 {
+            child.activeItem = child.allItems[0]
+        }
+
+        return self
+    }
+
+    /// Adds a coordinator as a tab, described for both hosts.
+    @discardableResult
+    func addTab<Output: Coordinatable, TabItem: View>(
+        _ coordinator: Output,
+        tabItem: @escaping (Bool) -> TabItem,
+        tabBarItem: @escaping () -> UITabBarItem,
+        onTapped: ((Bool, Output) -> Void)? = nil
+    ) -> Output {
+        if child.allItems == nil { child.allItems = [] }
+
+        child.allItems.append(
+            TabChildItem(
+                presentable: coordinator,
+                keyPathIsEqual: { _ in false },
+                tabItem: { AnyView(tabItem($0)) },
+                tabBarItem: { tabBarItem() },
                 onTapped: { isRepeat in onTapped?(isRepeat, coordinator) }
             )
         )

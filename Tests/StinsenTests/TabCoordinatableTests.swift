@@ -90,12 +90,14 @@ final class TabCoordinatableTests: XCTestCase {
                 presentable: AnyView(Text("A")),
                 keyPathIsEqual: { _ in false },
                 tabItem: { _ in AnyView(EmptyView()) },
+                tabBarItem: { nil },
                 onTapped: { _ in tappedCount += 1 }
             ),
             TabChildItem(
                 presentable: AnyView(Text("B")),
                 keyPathIsEqual: { _ in false },
                 tabItem: { _ in AnyView(EmptyView()) },
+                tabBarItem: { nil },
                 onTapped: { _ in tappedCount += 1 }
             )
         ]
