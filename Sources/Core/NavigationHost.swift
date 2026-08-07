@@ -129,6 +129,8 @@ final class NavigationHost {
         isReconciling = true
         defer { isReconciling = false }
 
+        reattachLostProbes()
+
         let survivors = liveRecords()
         let survivorIDs = Set(survivors.map(\.id))
         let removed = records.filter { !survivorIDs.contains($0.id) }
@@ -144,6 +146,36 @@ final class NavigationHost {
         // Something going away frees the context, so this is also a wake-up: a screen
         // recorded while a transition was in flight gets its turn here.
         presentPendingRecords()
+    }
+
+    /// Puts back any probe that has gone missing from a screen still on the stack.
+    ///
+    /// A probe is a child view controller, and `children` belongs to the screen, not to
+    /// us. Assigning `viewControllers` on a container replaces the children it manages
+    /// and takes the probe with it; so does any app that rebuilds its own containment.
+    /// Nothing announces that, and the failure is silent in the worst way — navigation
+    /// keeps working, because liveness is derived from UIKit rather than from the probe,
+    /// while lifecycle reporting quietly stops for that screen.
+    ///
+    /// This was not hypothetical: setting up the coordinator's own tab bar controller in
+    /// `viewDidLoad` removed the probe that had been attached moments earlier. That one
+    /// was fixed by reordering, which protects exactly one caller.
+    private func reattachLostProbes() {
+        for record in records where record.state == .live {
+            guard let viewController = record.viewController,
+                  viewController.isAttachedToHierarchy,
+                  ScreenProbe.attached(to: viewController, receiver: self) == nil else { continue }
+
+            #if DEBUG
+            print("""
+                Stinsen: the lifecycle probe for \(record.route) was removed from \
+                \(type(of: viewController)) — something reassigned its children. \
+                Reattaching.
+                """)
+            #endif
+            ScreenProbe.attach(to: viewController, route: record.route, receiver: self)?
+                .adoptCurrentState(of: viewController)
+        }
     }
 
     /// Drops every record without touching UIKit.

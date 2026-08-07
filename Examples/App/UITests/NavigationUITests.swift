@@ -162,14 +162,16 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(query.firstMatch.waitForExistence(timeout: 5),
                       "button \(identifier) not found", file: file, line: line)
 
-        // The testbed screen has grown long enough that a button can sit several
-        // screenfuls down, so scroll generously before giving up.
-        for attempt in 0...9 {
+        // The testbed screen is several screenfuls long, so scroll generously — and in
+        // both directions. Scrolling only downwards means that once a test has reached a
+        // button near the bottom, everything above it is unreachable for the rest of the
+        // test, which fails as "button not found" a long way from the cause.
+        for attempt in 0...17 {
             if let hittable = query.allElementsBoundByIndex.first(where: { $0.isHittable }) {
                 hittable.tap()
                 return
             }
-            if attempt < 9 { app.swipeUp() }
+            if attempt < 9 { app.swipeUp() } else { app.swipeDown() }
         }
         XCTFail("no hittable '\(identifier)' button on the front screen", file: file, line: line)
     }
@@ -624,6 +626,93 @@ final class NavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["UIKitRoot"].waitForExistence(timeout: 5),
                       "a view controller must be able to be the root")
         assertDisappears(1, "the SwiftUI root it replaced must be gone")
+    }
+
+    // MARK: - Lifecycle guarantees
+
+    /// Every disappearance reason, pinned.
+    ///
+    /// `reason(for:)` is inference — `isBeingDismissed`, `isMovingFromParent`, whether
+    /// the navigation controller still holds the screen, whether its view has a window.
+    /// It is right for the paths measured on this OS, and `isMovingFromParent` reading
+    /// `false` after an interactive pop is the sort of thing that was only ever found by
+    /// running it. Nothing about that is guaranteed to survive an OS update, so each
+    /// reason gets a test: a change should turn something red rather than quietly report
+    /// the wrong thing.
+    func testLifecycle_coveredIsReportedForTheScreenUnderneath() {
+        tapButton("ResetLifecycleLog")
+        tapButton("ShowPush")
+        assertAppears(2, "push")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(covered)", timeout: 5),
+            "a screen with something pushed over it is covered, not closed, got: \(currentLifecycleTrail())")
+    }
+
+    /// A screen removed while it was already out of sight.
+    ///
+    /// `popToRoot` from two screens deep closes both, but UIKit only announces the top
+    /// one — the lower screen had its disappearance when it was covered and gets no
+    /// second one. So the two are reported differently for the same event, which is the
+    /// documented non-uniformity `isClosed` exists to paper over.
+    func testLifecycle_detachedIsReportedForAScreenRemovedWhileHidden() {
+        tapButton("ShowPush")
+        assertAppears(2, "first screen")
+        tapButton("ShowPush")
+        assertAppears(3, "second screen, covering the first")
+
+        tapButton("ResetLifecycleLog")
+        tapButton("PopToRoot")
+        assertDisappears(2, "both screens close")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(detached)", timeout: 5),
+            "the covered screen must still be reported, got: \(currentLifecycleTrail())")
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "the visible screen keeps its accurate reason, got: \(currentLifecycleTrail())")
+    }
+
+    /// Lifecycle survives an app rebuilding the screen's containment.
+    ///
+    /// The probe is a child view controller, and `children` belongs to the screen. An app
+    /// that manages its own child controllers can remove it without knowing, and the
+    /// failure is silent in the worst way: navigation keeps working — liveness comes from
+    /// UIKit, not from the probe — while lifecycle reporting stops for that screen.
+    func testLifecycle_survivesTheProbeBeingRemoved() {
+        tapButton("ShowPush")
+        assertAppears(2, "push")
+
+        tapButton("StripChildControllers")
+        tapButton("ResetLifecycleLog")
+
+        tapButton("PopLast")
+        assertDisappears(2, "popping still works — it never depended on the probe")
+
+        // Reporting resumes, which is what the recovery is for. The *reason* is asserted
+        // loosely on purpose: a rebuilt probe never observed the appearance it would
+        // normally reason from, and measurement shows it can land on a less accurate
+        // reason than the original would have. Seeding it with the screen's current state
+        // narrows that but does not close it, and pinning the exact reason here would be
+        // pinning the approximation rather than the behaviour.
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear", timeout: 5),
+            "the probe must have been put back, got: \(currentLifecycleTrail())")
+    }
+
+    // MARK: - Hand-built hosting controllers
+
+    /// A `UIHostingController` the app built itself, with its own environment.
+    ///
+    /// This is how SwiftUI content gets an environment across a screen boundary: the
+    /// environment does not survive a hosting controller boundary, so a screen that needs
+    /// one builds its own controller and injects it there. The coordinator neither knows
+    /// nor cares — it is a view controller like any other.
+    func testOwnHostingController_keepsItsInjectedEnvironment() {
+        tapButton("ShowOwnHostingController")
+        assertAppears(2, "the app's own hosting controller is a screen like any other")
+
+        XCTAssertTrue(app.staticTexts["InjectedNote"].label == "injected",
+                      "the environment the app injected must survive, got: \(app.staticTexts["InjectedNote"].label)")
+
+        tapButton("PopLast")
+        assertDisappears(2, "and it pops like any other")
     }
 
     // MARK: - UIKit tabs

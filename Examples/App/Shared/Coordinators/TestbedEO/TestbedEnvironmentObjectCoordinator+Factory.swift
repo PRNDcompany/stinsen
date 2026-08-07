@@ -39,6 +39,29 @@ extension TestbedEnvironmentObjectCoordinator {
         TestbedEnvironmentObjectScreen(coordinator: self, serial: nextScreenSerial())
     }
 
+    /// A `UIHostingController` the app built itself, rather than one the library built.
+    ///
+    /// This is the answer to "SwiftUI content, but I need my own environment": the
+    /// environment does not cross a hosting controller boundary, so a screen that needs
+    /// one injects it here, where it owns the controller. Routing to it is no different
+    /// from routing to any other view controller.
+    @MainActor
+    func makeOwnHostingController() -> UIViewController {
+        let serial = nextScreenSerial()
+        let controller = UIHostingController(
+            rootView: VStack {
+                Text("Screen \(serial)")
+                    .accessibilityIdentifier("Screen-\(serial)")
+                InjectedValueLabel()
+                Button("Pop last") { [unowned self] in popLast() }
+                    .accessibilityIdentifier("PopLast")
+            }
+            .environment(\.injectedNote, "injected")
+        )
+        controller.view.backgroundColor = .systemBackground
+        return controller
+    }
+
     /// A root built the way a UIKit app builds one — no SwiftUI anywhere in it.
     func makeUIKitStart() -> UIViewController {
         let controller = UIViewController()
@@ -232,5 +255,26 @@ final class TestbedTabCoordinator: TabCoordinatable {
         let item = UITabBarItem(title: "Two", image: UIImage(systemName: "2.circle"), tag: 1)
         item.accessibilityIdentifier = "TabTwo"
         return item
+    }
+}
+
+/// Reads a value that only exists if the app's own hosting controller injected it.
+private struct InjectedValueLabel: View {
+    @Environment(\.injectedNote) private var note
+
+    var body: some View {
+        Text(note)
+            .accessibilityIdentifier("InjectedNote")
+    }
+}
+
+private struct InjectedNoteKey: EnvironmentKey {
+    static let defaultValue = "not-injected"
+}
+
+extension EnvironmentValues {
+    var injectedNote: String {
+        get { self[InjectedNoteKey.self] }
+        set { self[InjectedNoteKey.self] = newValue }
     }
 }

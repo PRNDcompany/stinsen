@@ -243,6 +243,29 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("ShowUIKitTabs")
 
+                // A UIHostingController the app builds itself, with its own environment.
+                RoundedButton("Own hosting controller") {
+                    coordinator.route(.push, to: coordinator.makeOwnHostingController())
+                }
+                .accessibilityIdentifier("ShowOwnHostingController")
+
+                // Rebuilds the front screen's containment, the way an app managing its
+                // own child view controllers would — and takes the lifecycle probe with
+                // it, since the probe lives in `children`.
+                RoundedButton("Strip child controllers") {
+                    // The navigation controller's top screen, not `topmostViewController()`
+                    // — that descends into children, and the probe *is* a child, so it
+                    // would land on the probe itself.
+                    guard let nav = Self.topmostViewController()?.navigationController,
+                          let target = nav.topViewController else { return }
+                    for child in target.children {
+                        child.willMove(toParent: nil)
+                        child.view.removeFromSuperview()
+                        child.removeFromParent()
+                    }
+                }
+                .accessibilityIdentifier("StripChildControllers")
+
                 Divider().padding(.vertical, 8)
 
                 // MARK: Refactor verification scenarios

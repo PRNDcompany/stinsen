@@ -22,6 +22,17 @@ public enum ScreenDisappearReason: Hashable, Sendable {
     /// finally removed. Anything doing "the screen closed" work must handle
     /// `.popped`, `.dismissed` **and** `.detached`.
     case detached
+
+    /// Whether the screen is gone, as opposed to merely out of sight.
+    ///
+    /// Three of the four cases mean "closed", and which one you get depends on where the
+    /// screen was: the top one reports `.popped` or `.dismissed`, while one that was
+    /// already covered reports `.detached`, because UIKit had already sent its
+    /// disappearance when it was covered and sends nothing more when it is finally
+    /// removed. That distinction is real and worth having, but it should not be
+    /// something every caller has to reconstruct — enumerating three cases to ask one
+    /// question is how a fourth case, added later, silently stops being handled.
+    public var isClosed: Bool { self != .covered }
 }
 
 /// Opt-in screen lifecycle for a coordinator.
@@ -33,6 +44,18 @@ public enum ScreenDisappearReason: Hashable, Sendable {
 /// *which* screen this is: drilling from one product detail into another gives both
 /// screens the same route. The view controller is the occurrence identity, and for a
 /// UIKit-based app it is directly useful besides.
+/// ### What is guaranteed, and what is not
+///
+/// These are **observations**, not commitments. They are reported when UIKit says a
+/// screen appeared or disappeared, so they inherit UIKit's silences: a screen inside a
+/// container that does not forward appearance callbacks — every UIKit container turns
+/// forwarding off — reports nothing at all, and neither does one whose view controller is
+/// released before UIKit gets round to telling us.
+///
+/// `route(_:to:onDismiss:)` is the commitment. Its closure runs exactly once, whichever
+/// path removed the screen, because the coordinator runs it itself when it drops the
+/// record rather than waiting to be told. Use `onDismiss` for work that has to happen and
+/// `screenDidDisappear` for work that follows from what the user did.
 @MainActor
 public protocol CoordinatorLifecycleAware: AnyObject {
     func screenWillAppear(_ route: RouteKey, viewController: UIViewController, animated: Bool)
@@ -98,6 +121,25 @@ final class ScreenProbe: UIViewController {
     /// to ask "was I removed from you?".
     private weak var owningNavigationController: UINavigationController?
 
+    /// The ancestor the navigation controller actually holds.
+    ///
+    /// Not the same object as the host: a host is often nested — the coordinator's own
+    /// anchor sits inside a hosting controller — so asking whether the navigation
+    /// controller still contains *the host* is asking about something that was never in
+    /// it. That read every push as a pop of the screen underneath, which is a screen
+    /// that had not gone anywhere.
+    private weak var owningNavigationEntry: UIViewController?
+
+    /// What was holding the host while it was on screen.
+    ///
+    /// The one question that separates "removed" from "covered" for every kind of
+    /// screen: a popped screen loses its navigation controller, a screen taken out of a
+    /// container by the app's own teardown loses that container, and a covered screen
+    /// loses neither. Asking the navigation controller alone gets the containment case
+    /// wrong — an overlay's navigation entry is the screen *underneath* it, which is
+    /// still very much there.
+    private weak var owningHostContainer: UIViewController?
+
     /// Whether the single "this screen went away" report has been made.
     ///
     /// Two paths can arrive at it and their order is not fixed: an unwind we initiated
@@ -137,6 +179,23 @@ final class ScreenProbe: UIViewController {
         view.isHidden = true
         view.isUserInteractionEnabled = false
         self.view = view
+    }
+
+    /// Tells a freshly attached probe what it missed.
+    ///
+    /// A probe learns everything from the callbacks it receives, so one attached to a
+    /// screen that is *already* on screen has seen nothing: it does not know the screen
+    /// is visible, and it does not know which navigation controller holds it — both of
+    /// which are recorded on appearance and both of which decide how a later removal is
+    /// reported. Without this a re-attached probe called a pop a `.dismissed`.
+    ///
+    /// Only ever called for a screen that is on screen now, which is why reading the
+    /// state directly is equivalent to having observed it.
+    func adoptCurrentState(of host: UIViewController) {
+        isHostVisible = host.viewIfLoaded?.window != nil
+        owningNavigationController = host.navigationController
+        owningNavigationEntry = host.navigationStackEntry
+        owningHostContainer = host.parent
     }
 
     /// Claims the right to report this screen's disappearance.
@@ -205,6 +264,8 @@ final class ScreenProbe: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         owningNavigationController = parent?.navigationController
+        owningNavigationEntry = parent?.navigationStackEntry
+        owningHostContainer = parent?.parent
         isHostVisible = true
         report(.didAppear, animated: animated)
     }
@@ -237,8 +298,15 @@ final class ScreenProbe: UIViewController {
         if host.isBeingDismissed { return .dismissed }
         if host.isMovingFromParent { return .popped }
 
-        if let nav = owningNavigationController {
-            return nav.viewControllers.contains(host) ? .covered : .popped
+        // Taken out of whatever was holding it — popped off a navigation controller, or
+        // removed from a container by the app's own teardown. Both are removals; a
+        // covered screen is still held by the same thing it always was.
+        if let container = owningHostContainer, host.parent !== container {
+            return .popped
+        }
+
+        if let nav = owningNavigationController, let entry = owningNavigationEntry {
+            return nav.viewControllers.contains { $0 === entry } ? .covered : .popped
         }
         // Presented and no longer presented by anyone: dismissed by some other path.
         if host.presentingViewController == nil, host.viewIfLoaded?.window == nil {
