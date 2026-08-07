@@ -6,6 +6,9 @@ public struct AnyPresentationType: PresentationType {
 
     var presentationType: PresentationType
 
+    /// Forwarded from the wrapped presentation, so erasing does not lose it.
+    public var kind: PresentationKind { presentationType.kind }
+
     public init(_ presentationType: PresentationType) {
         self.presentationType = presentationType
     }
@@ -38,17 +41,19 @@ extension AnyPresentationType {
     public init<VC: UIViewController>(
         make: @escaping (AnyView, @escaping () -> Void) -> VC,
         present: @escaping (UIViewController, VC) -> Void,
-        dismiss: @escaping (UIViewController) -> Void
+        dismiss: @escaping (UIViewController) -> Void,
+        kind: PresentationKind = .custom
     ) {
-        self.init(UIKitPresentation(make: make, present: present, dismiss: dismiss))
+        self.init(UIKitPresentation(make: make, present: present, dismiss: dismiss, kind: kind))
     }
 
     /// Create an AnyPresentationType with closures (default dismiss behavior).
     public init<VC: UIViewController>(
         make: @escaping (AnyView, @escaping () -> Void) -> VC,
-        present: @escaping (UIViewController, VC) -> Void
+        present: @escaping (UIViewController, VC) -> Void,
+        kind: PresentationKind = .custom
     ) {
-        self.init(UIKitPresentation(make: make, present: present))
+        self.init(UIKitPresentation(make: make, present: present, kind: kind))
     }
 }
 
@@ -61,7 +66,8 @@ extension AnyPresentationType {
             make: { content, _ in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.navigationController?.pushViewController(viewController, animated: true)
-            }
+            },
+            kind: .push
         )
     }
 
@@ -71,7 +77,8 @@ extension AnyPresentationType {
             make: { content, _ in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.present(viewController, animated: true)
-            }
+            },
+            kind: .modal
         )
     }
 
@@ -86,7 +93,8 @@ extension AnyPresentationType {
             present: { parent, viewController in
                 viewController.modalPresentationStyle = .fullScreen
                 parent.present(viewController, animated: true)
-            }
+            },
+            kind: .fullScreen
         )
     }
 }

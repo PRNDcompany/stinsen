@@ -218,80 +218,56 @@ public extension NavigationCoordinatable {
         }
     }
     
-    // Track if dismiss is in progress to prevent duplicate calls
-    // Uses NSHashTable with weak references for automatic cleanup on deallocation
-    private var isDismissing: Bool {
-        get {
-            return DismissingCoordinators.shared.contains(self)
+    /// This coordinator's screens, and the view controller they hang off.
+    ///
+    /// Bound to `self` on first use rather than at construction: `stack` is initialised
+    /// in a property declaration, before there is a `self` to hand it.
+    internal var host: NavigationHost {
+        let host = stack.host
+        if host.owner == nil {
+            host.owner = self
+            host.rootRoute = .declared(stack.initial)
         }
-        set {
-            if newValue {
-                DismissingCoordinators.shared.insert(self)
-            } else {
-                DismissingCoordinators.shared.remove(self)
-            }
-        }
+        return host
+    }
+
+    /// Drops this coordinator's screens without touching UIKit — the parent already did.
+    internal func teardownHost() {
+        stack.host.teardown()
     }
 
     func customize(_ view: AnyView) -> some View {
         return view
     }
-    
+
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)? = nil) {
-        
+
         // Track for memory leak in debug mode
         #if DEBUG
         coordinator.trackForMemoryLeak()
         #endif
-        
-        // Check if already dismissing to prevent duplicate calls
-        if coordinator is (any NavigationCoordinatable) {
-            if let navCoordinator = coordinator as? any NavigationCoordinatable,
-               navCoordinator.isDismissing {
-                return
-            }
-            (coordinator as? any NavigationCoordinatable)?.isDismissing = true
-        }
-        
-        // First check if the stack is empty - nothing to dismiss
+
+        host.reconcile()
+
         guard !stack.value.isEmpty else {
             action?() // Still call the action if provided
-            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
             return
         }
-        
-        // Try to find the coordinator in the stack
-        guard let value = stack.value.firstIndex(where: { item in
-            guard case .coordinator(let presentable) = item.content else {
-                return false
-            }
-            
-            let matches = presentable.id == coordinator.id
-            if matches {
-            }
-            return matches
-        }) else {
-            // Coordinator not found in stack - pop the last item as fallback
-            if !stack.value.isEmpty {
-                let wrappedAction = {
-                    action?()
-                    (coordinator as? any NavigationCoordinatable)?.isDismissing = false
-                }
-                self.popTo(stack.value.count - 2, wrappedAction)
-                return
-            }
-            action?() // Still call the action if provided
-            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
+
+        // Identity, not `id` strings. Declared coordinator routes are stored wrapped in
+        // `AnyCoordinator`, and the object calling `dismissCoordinator()` is the
+        // coordinator inside the box — so both sides are unwrapped before comparing.
+        let target = coordinatorInstance(coordinator)
+        guard let index = stack.value.firstIndex(where: { $0.childObject === target }) else {
+            // Coordinator not found in stack - pop the last item as fallback.
+            // Guesswork, and it closes whatever happens to be on top: removing it is a
+            // behaviour change and lands as its own commit.
+            host.unwind(keepingFirst: stack.value.count - 1, animated: true, completion: action)
             return
         }
-        // Create wrapper action to clear flag after completion
-        let wrappedAction = {
-            action?()
-            (coordinator as? any NavigationCoordinatable)?.isDismissing = false
-        }
-        self.popTo(value - 1, wrappedAction)
+        host.unwind(keepingFirst: index, animated: true, completion: action)
     }
-    
+
     func dismissCoordinator(_ action: (() -> ())? = nil) {
         guard let parent = stack.parent else {
             assertionFailure("dismissCoordinator: no parent and no SwiftUI dismiss available")
@@ -314,94 +290,93 @@ public extension NavigationCoordinatable {
         self.stack.root = NavigationRoot(item: item, transition: transition ?? .identity)
     }
     
-    /// Called when a view controller appears. Intentionally a no-op;
-    /// navigation state changes should be explicit through push/pop/dismiss.
-    internal func appear(_ int: Int) { }
-
-    internal func disappear(_ id: Int) {
-        if let action = stack.dismissalAction[id] {
-            action()
-        }
-        stack.dismissalAction[id] = nil
-
-        // PresentationController(id: N) presents stack[N+1].
-        // When stack[N+1] is dismissed, we pop to index N (keeping stack[N]).
-        // Guard: only pop if stack[N+1] still exists — if it was already removed
-        // by a programmatic pop (e.g. popLast), skip to avoid spurious poppedSubject events.
-        if id < stack.value.count - 1 {
-            stack.popToIndex(id)
-        }
-    }
-
+    /// Closes the topmost screen.
     func popLast(_ action: (() -> ())? = nil) {
-        self.popTo(self.stack.value.count - 2, action)
+        host.reconcile()
+        host.unwind(keepingFirst: stack.value.count - 1, animated: true, completion: action)
     }
-    
-    internal func popTo(_ int: Int, _ action: (() -> ())? = nil) {
-        if let action = action {
-            self.stack.dismissalAction[int] = action
-        }
 
-        stack.popToIndex(int)
+    /// Rewinds to a screen opened with `route(_:to:id:)`.
+    ///
+    /// UIKit's unwind segue, without the storyboard: `popLast()` goes back one and
+    /// `popToRoot()` goes back all the way, and until now there was nothing in between.
+    ///
+    /// When a name appears more than once this rewinds to the **nearest** one, which is
+    /// what "go back to the list" means when you have been through two of them. Note
+    /// that `focusFirst` does the opposite by design — hence the different verb.
+    ///
+    /// - Returns: whether a screen with that name was found.
+    @discardableResult func popTo(id: String, _ action: (() -> ())? = nil) -> Bool {
+        host.reconcile()
+        guard let index = stack.value.lastIndex(where: { $0.route.name == id }) else {
+            return false
+        }
+        host.unwind(keepingFirst: index + 1, animated: true, completion: action)
+        return true
     }
-    
+
     func view() -> AnyView {
-        return AnyView(NavigationCoordinatableView(id: -1, coordinator: self))
+        return AnyView(NavigationCoordinatableView(coordinator: self))
     }
 
     @discardableResult func popToRoot(_ action: (() -> ())? = nil) -> Self {
-        self.popTo(-1, action)
+        host.reconcile()
+        host.unwind(keepingFirst: 0, animated: true, completion: action)
         return self
     }
-    
+
+    /// Records a screen and asks the host to put it up.
+    ///
+    /// `onDismiss` is attached to the screen being opened, not to the one below it. The
+    /// old keying — "store the action at the current top index" — is why routing from
+    /// inside a dismissal handler used to be truncated by the very pop that triggered it.
+    private func appendRecord(
+        presentation: PresentationType,
+        content: StackItemContent,
+        route: RouteKey,
+        keyPath: Int,
+        input: Any?,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        host.reconcile()
+        host.append(
+            RouteRecord(
+                route: route,
+                keyPath: keyPath,
+                input: input,
+                content: content,
+                presentation: AnyPresentationType(presentation),
+                onDismiss: onDismiss
+            )
+        )
+    }
+
     @discardableResult func route<Input, Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input,
         onDismiss: @escaping () -> ()
     ) -> Output {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route, input)
+        _route(to: route, input, onDismiss: onDismiss)
     }
-    
+
     @discardableResult func route<Input, Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input
     ) -> Output {
-        let transition = self[keyPath: route]
-        let output = transition.closure(self)(input)
-        let item = NavigationStackItem(
-            presentationType: transition.type.type,
-            content: .coordinator(output),
-            keyPath: route.hashValue,
-            input: input
-        )
-        stack.push(item)
-        output.parent = self
-        return output
+        _route(to: route, input, onDismiss: nil)
     }
 
     @discardableResult func route<Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
     ) -> Output {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route)
+        _route(to: route, (), onDismiss: onDismiss)
     }
 
     @discardableResult func route<Output: Coordinatable>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>
     ) -> Output {
-        let transition = self[keyPath: route]
-        let output = transition.closure(self)(())
-        let item = NavigationStackItem(
-            presentationType: transition.type.type,
-            content: .coordinator(output),
-            keyPath: route.hashValue,
-            input: nil
-        )
-        stack.push(item)
-        output.parent = self
-        return output
+        _route(to: route, (), onDismiss: nil)
     }
 
     @discardableResult func route<Input, Output: View>(
@@ -409,46 +384,63 @@ public extension NavigationCoordinatable {
         _ input: Input,
         onDismiss: @escaping () -> ()
     ) -> Self {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route, input)
+        _route(to: route, input, onDismiss: onDismiss)
     }
 
     @discardableResult func route<Input, Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: Input
     ) -> Self {
-        let transition = self[keyPath: route]
-        let output = transition.closure(self)(input)
-        let item = NavigationStackItem(
-            presentationType: transition.type.type,
-            content: .view(AnyView(output)),
-            keyPath: route.hashValue,
-            input: input
-        )
-        stack.push(item)
-        return self
+        _route(to: route, input, onDismiss: nil)
     }
 
     @discardableResult func route<Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>,
         onDismiss: @escaping () -> ()
     ) -> Self {
-        stack.dismissalAction[stack.value.count - 1] = onDismiss
-        return self.route(to: route)
+        _route(to: route, (), onDismiss: onDismiss)
     }
 
     @discardableResult func route<Output: View>(
         to route: KeyPath<Self, Transition<Self, Presentation, Void, Output>>
     ) -> Self {
+        _route(to: route, (), onDismiss: nil)
+    }
+
+    @discardableResult private func _route<Input, Output: Coordinatable>(
+        to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
+        _ input: Input,
+        onDismiss: (() -> Void)?
+    ) -> Output {
         let transition = self[keyPath: route]
-        let output = transition.closure(self)(())
-        let item = NavigationStackItem(
-            presentationType: transition.type.type,
-            content: .view(AnyView(output)),
+        let output = transition.closure(self)(input)
+        appendRecord(
+            presentation: transition.type.type,
+            content: .coordinator(output),
+            route: .declared(route),
             keyPath: route.hashValue,
-            input: nil
+            input: Input.self == Void.self ? nil : input,
+            onDismiss: onDismiss
         )
-        stack.push(item)
+        output.parent = self
+        return output
+    }
+
+    @discardableResult private func _route<Input, Output: View>(
+        to route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
+        _ input: Input,
+        onDismiss: (() -> Void)?
+    ) -> Self {
+        let transition = self[keyPath: route]
+        let output = transition.closure(self)(input)
+        appendRecord(
+            presentation: transition.type.type,
+            content: .view(AnyView(output)),
+            route: .declared(route),
+            keyPath: route.hashValue,
+            input: Input.self == Void.self ? nil : input,
+            onDismiss: onDismiss
+        )
         return self
     }
 
@@ -459,23 +451,25 @@ public extension NavigationCoordinatable {
 
      - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
      - Parameter view: The view to present.
+     - Parameter id: Optional name for this screen, so it can be navigated back to later.
+       Without one the screen is anonymous, which is the previous behaviour: reachable
+       only by `popLast()` / `popToRoot()`, never by name.
      - Parameter onDismiss: Optional closure called when the presented view is dismissed.
      */
     @discardableResult func route<Content: View>(
         _ presentationType: AnyPresentationType,
         to view: Content,
+        id: String? = nil,
         onDismiss: (() -> Void)? = nil
     ) -> Self {
-        if let onDismiss = onDismiss {
-            stack.dismissalAction[stack.value.count - 1] = onDismiss
-        }
-        let item = NavigationStackItem(
-            presentationType: presentationType,
+        appendRecord(
+            presentation: presentationType,
             content: .view(AnyView(view)),
+            route: id.map(RouteKey.named) ?? .anonymous(),
             keyPath: ImperativeRouteId.next(),
-            input: nil
+            input: nil,
+            onDismiss: onDismiss
         )
-        stack.push(item)
         return self
     }
 
@@ -484,36 +478,42 @@ public extension NavigationCoordinatable {
 
      - Parameter presentationType: The presentation type (e.g. .push(), .modal(), .popupModal()).
      - Parameter coordinator: The coordinator to present.
+     - Parameter id: Optional name for this screen, so it can be navigated back to later.
      - Parameter onDismiss: Optional closure called when the presented coordinator is dismissed.
      */
     @discardableResult func route<Output: Coordinatable>(
         _ presentationType: AnyPresentationType,
         to coordinator: Output,
+        id: String? = nil,
         onDismiss: (() -> Void)? = nil
     ) -> Output {
-        if let onDismiss = onDismiss {
-            stack.dismissalAction[stack.value.count - 1] = onDismiss
-        }
-        let item = NavigationStackItem(
-            presentationType: presentationType,
+        appendRecord(
+            presentation: presentationType,
             content: .coordinator(coordinator),
+            route: id.map(RouteKey.named) ?? .anonymous(),
             keyPath: ImperativeRouteId.next(),
-            input: nil
+            input: nil,
+            onDismiss: onDismiss
         )
-        stack.push(item)
         coordinator.parent = self
         return coordinator
     }
 
-    /// Finds the first stack item matching the given route and input, then pops to it.
-    /// Returns the matched item for further processing.
+    /// Finds the first screen matching the given route and input, then rewinds to it.
+    ///
+    /// **First** match, not the nearest one — the opposite of `popTo(id:)`. Both are
+    /// defensible ("go to where this flow started" vs. "go back one level") and only the
+    /// names distinguish them, which is why the other one says `popTo` rather than
+    /// `focusLast`.
     @discardableResult
     private func _popToFirstMatch<Input, Output: ViewPresentable>(
         _ route: KeyPath<Self, Transition<Self, Presentation, Input, Output>>,
         _ input: (value: Input, comparator: ((Input, Input) -> Bool))?
-    ) throws -> NavigationStackItem {
+    ) throws -> RouteRecord {
+        host.reconcile()
+        let key = RouteKey.declared(route)
         guard let value = stack.value.enumerated().first(where: { item in
-            guard item.element.keyPath == route.hashValue else {
+            guard item.element.route == key else {
                 return false
             }
 
@@ -531,7 +531,7 @@ public extension NavigationCoordinatable {
             throw FocusError.routeNotFound
         }
 
-        self.popTo(value.offset, nil)
+        host.unwind(keepingFirst: value.offset + 1, animated: true)
         return value.element
     }
 
@@ -645,6 +645,34 @@ public extension NavigationCoordinatable {
         }
     }
     
+    /// Returns the active root's child if the given route is the one currently rooted.
+    ///
+    /// Use this to act on the root coordinator without assuming it is active — e.g. a
+    /// deep link that only makes sense once the user is authenticated:
+    ///
+    ///     if let authenticated = hasRoot(\.authenticated)?.unwrap(AuthenticatedCoordinator.self) {
+    ///         // ...
+    ///     }
+    ///
+    /// Root coordinator routes are erased to `AnyCoordinator`, so call
+    /// `unwrap(_:)` to get back to your own coordinator's API.
+    ///
+    /// - Returns: The active root's child, or `nil` if a different route is rooted.
+    func hasRoot<Input, Output: Coordinatable>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>
+    ) -> Output? {
+        guard let item = stack.root?.activeSlot?.item,
+              item.keyPath == route.hashValue else { return nil }
+        return item.child as? Output
+    }
+
+    /// Whether the given view route is the one currently rooted.
+    func hasRoot<Input, Output: View>(
+        _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>
+    ) -> Bool {
+        stack.root?.activeSlot?.item.keyPath == route.hashValue
+    }
+
     @discardableResult func root<Output: Coordinatable>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Void, Output>>
     ) -> Output {
@@ -713,28 +741,6 @@ public extension NavigationCoordinatable {
         animation: Animation?
     ) -> Self {
         self._root(route, input: input, animation: animation)
-    }
-}
-
-// Helper class to track dismissing coordinators
-// Uses NSHashTable with weak references so entries auto-clean on deallocation
-@MainActor
-private class DismissingCoordinators {
-    static let shared = DismissingCoordinators()
-    private let coordinators = NSHashTable<AnyObject>.weakObjects()
-
-    private init() {}
-
-    func contains(_ coordinator: AnyObject) -> Bool {
-        return coordinators.contains(coordinator)
-    }
-
-    func insert(_ coordinator: AnyObject) {
-        coordinators.add(coordinator)
-    }
-
-    func remove(_ coordinator: AnyObject) {
-        coordinators.remove(coordinator)
     }
 }
 

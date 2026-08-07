@@ -3,73 +3,59 @@ import SwiftUI
 import Combine
 
 
+/// A coordinator's root screen, and the anchor its later screens hang off.
+///
+/// There is one of these per coordinator now, not one per stack level. Levels used to
+/// recurse — each presented screen was wrapped in another `NavigationCoordinatableView`
+/// carrying the next depth index — because in the SwiftUI implementation each level
+/// genuinely was a separate view value with no identity of its own. Over UIKit the
+/// presented view controllers *are* the levels, so the recursion (and the index it
+/// existed to carry) is gone.
 struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
     var coordinator: T
-    private let id: Int
-    @StateObject var presentationHelper: PresentationHelper<T>
     @ObservedObject var root: NavigationRoot
 
-    var start: AnyView?
-
     var body: some View {
-        commonView
-    }
-
-
-    @ViewBuilder
-    var rootView: some View {
-        if id == -1 {
-            coordinator
-                .customize(AnyView(
-                    NavigationRootView(
-                        root: root,
-                        coordinator: coordinator
-                    )
-                ))
-        } else if let start = self.start {
-            start
-        } else {
-            EmptyView()
-        }
-    }
-
-    @ViewBuilder
-    var commonView: some View {
-        rootView
-            .background(UIKitIntrospectionViewController(
-                selector: { FindControllerUtil.findParentController(of: $0) }
-            ) {
-                presentationHelper.setupViewController($0)
+        coordinator
+            .customize(AnyView(
+                NavigationRootView(
+                    root: root,
+                    coordinator: coordinator
+                )
+            ))
+            // The introspection view controller *is* the anchor — it is not used to go
+            // looking for someone else's.
+            //
+            // Walking up to the enclosing controller made the anchor whatever view
+            // controller happened to contain this coordinator's root view, which is not
+            // the coordinator's own: dropping a coordinator into an ordinary SwiftUI
+            // hierarchy —
+            //
+            //     VStack { Text("…"); ChildCoordinator().view() }
+            //
+            // — gives the child the *same* anchor as its parent, and with it the
+            // parent's probe and the parent's idea of what is in front. A representable
+            // already gets a view controller of its own, one per coordinator, so there
+            // is nothing to search for.
+            //
+            // It works as an anchor because containment resolves through it:
+            // `navigationController` reads through ancestors, `present` forwards to the
+            // nearest controller defining a presentation context, and
+            // `navigationStackEntry` finds the ancestor the navigation controller
+            // actually holds.
+            .background(UIKitIntrospectionViewController(selector: { $0 }) {
+                coordinator.host.bind(base: $0)
             })
     }
 
-    init(id: Int, coordinator: T) {
-        self.id = id
+    init(coordinator: T) {
         self.coordinator = coordinator
-        self._presentationHelper = StateObject(wrappedValue: {
-            PresentationHelper(
-                id: id,
-                coordinator: coordinator
-            )
-        }())
 
         if coordinator.stack.root == nil {
             coordinator.setupRoot()
         }
 
         self.root = coordinator.stack.root
-
-        if let presentation = coordinator.stack.value[safe: id] {
-            if case .view(let view) = presentation.content {
-                self.start = view
-            } else {
-                fatalError("Can only show views")
-            }
-        } else if id == -1 {
-            self.start = nil
-        } else {
-            fatalError()
-        }
     }
 }
 

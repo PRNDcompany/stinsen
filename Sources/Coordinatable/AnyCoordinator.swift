@@ -24,6 +24,12 @@ fileprivate nonisolated class _AnyCoordinatorBase: Coordinatable {
         fatalError("must override")
     }
 
+    /// The wrapped instance, as an object. Needed because erasing hides the concrete
+    /// type from `as?` — see `AnyCoordinator.unwrap(_:)`.
+    nonisolated var baseObject: AnyObject {
+        fatalError("must override")
+    }
+
     nonisolated init() {
         guard type(of: self) != _AnyCoordinatorBase.self else {
             fatalError("_AnyCoordinatorBase instances can not be created; create a subclass instance instead")
@@ -59,6 +65,10 @@ fileprivate nonisolated final class _AnyCoordinatorBox<Base: Coordinatable>: _An
     nonisolated override var id: String {
         _id
     }
+
+    nonisolated override var baseObject: AnyObject {
+        base
+    }
 }
 
 // MARK: - AnyCoordinator Wrapper
@@ -81,6 +91,29 @@ public nonisolated final class AnyCoordinator: Coordinatable {
 
     nonisolated public var id: String {
         _id
+    }
+
+    /// The erased coordinator as a bare object.
+    ///
+    /// Erasure hides the concrete type from `as?` *and* replaces the object `===` would
+    /// compare, so any identity question about a boxed coordinator has to go through
+    /// here first. Use `unwrap(_:)` when the concrete type is what you want.
+    nonisolated public var baseObject: AnyObject { box.baseObject }
+
+    /// Recovers the concrete coordinator that was erased.
+    ///
+    /// Route declarations erase coordinator outputs to `AnyCoordinator` so that
+    /// factories can return `some Coordinatable`. That means `route(to:)`, `root(_:)`
+    /// and `hasRoot(_:)` hand back a box rather than your type — use this to get back
+    /// to the coordinator's own API.
+    ///
+    ///     coordinator.hasRoot(\.authenticated)?.unwrap(AuthenticatedCoordinator.self)
+    ///
+    /// Returns `nil` if the erased coordinator is not of the requested type.
+    nonisolated public func unwrap<T: Coordinatable>(_ type: T.Type = T.self) -> T? {
+        if let direct = box.baseObject as? T { return direct }
+        // Tolerate nesting, e.g. AnyCoordinator(AnyCoordinator(x)).
+        return (box.baseObject as? AnyCoordinator)?.unwrap(type)
     }
 
     private nonisolated(unsafe) var box: _AnyCoordinatorBase

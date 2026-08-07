@@ -35,3 +35,10 @@ open class ViewWrapperCoordinator<T: Coordinatable, V: View>: Coordinatable {
         self.child.parent = self
     }
 }
+
+/// A wrapper decorates a coordinator, it does not replace it — so a teardown cascade
+/// that stopped here would leave the wrapped coordinator's screens believing they were
+/// still open, and their `onDismiss` closures would never run.
+extension ViewWrapperCoordinator: CoordinatorChildForwarding {
+    var forwardedChild: any Coordinatable { child }
+}

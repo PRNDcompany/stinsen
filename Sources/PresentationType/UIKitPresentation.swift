@@ -21,21 +21,31 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
     var presentHandler: PresentHandler
     var dismissHandler: DismissHandler
 
+    public let kind: PresentationKind
+
     public init(make makeUIViewController: @escaping MakeUIViewControllerHandler,
                 present presentHandler: @escaping PresentHandler,
-                dismiss dismissHandler: @escaping DismissHandler) {
+                dismiss dismissHandler: @escaping DismissHandler,
+                kind: PresentationKind = .custom) {
         self.makeUIViewController = makeUIViewController
         self.presentHandler = presentHandler
         self.dismissHandler = dismissHandler
+        self.kind = kind
     }
 
     public init(make makeUIViewController: @escaping MakeUIViewControllerHandler,
-                present presentHandler: @escaping PresentHandler) {
+                present presentHandler: @escaping PresentHandler,
+                kind: PresentationKind = .custom) {
         self.makeUIViewController = makeUIViewController
         self.presentHandler = presentHandler
+        self.kind = kind
         self.dismissHandler = { viewController in
+            // `> 1`, not `> 2`: a root plus this one screen already means there is
+            // something to go back to. With the old threshold the first pushed screen
+            // fell through to `dismiss(animated:)`, which does nothing at all to a
+            // *pushed* view controller — so "go back" silently did nothing at depth one.
             if let navigationController = viewController.navigationController,
-               navigationController.viewControllers.count > 2 {
+               navigationController.viewControllers.count > 1 {
                 viewController.navigationController?.popViewController(animated: true)
             } else {
                 // NOTE: Dismiss from presenting VC to close any presented VCs at once
@@ -50,8 +60,13 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
 
     public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented? {
         switch content {
-        case .view:
-            let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
+        case .view(let view):
+            // The view is presented as it is. It used to be wrapped in another
+            // `NavigationCoordinatableView` carrying `nextId`, whose only job was to
+            // introspect its way to a view controller so *the next* level could be
+            // presented from it. `NavigationHost` owns every level now, so there is
+            // nothing left for the wrapper to do — and `nextId` names a position that
+            // no longer exists.
             return ViewControllerPresented(
                 viewController: makeViewController(content: view),
                 presentationType: self

@@ -2,7 +2,17 @@
 //  NavigationStackTests.swift
 //  StinsenTests
 //
-//  Unit tests for NavigationStack functionality
+//  What a coordinator records, and what rewinding removes.
+//
+//  These used to drive `CoordinatorStack` directly — `push`, `popToIndex`, the Combine
+//  publishers, the `dismissalAction` dictionary. All of that was the depth-index
+//  machinery, and it is gone: screens are recorded by `NavigationHost` and their order
+//  is read back from UIKit. So the tests now go through the coordinator API, which is
+//  the only way in that still exists.
+//
+//  No view controllers are involved here, so no host is bound. That is the deliberate
+//  "recorded but not yet on screen" case: routing during a deep link, before the first
+//  render, has to behave exactly like routing afterwards.
 //
 
 import XCTest
@@ -28,218 +38,170 @@ final class NavigationStackTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - Initialization Tests
+    // MARK: - Initialization
 
     func testInitialStackIsEmpty() {
         XCTAssertEqual(stack.value.count, 0)
-        XCTAssertEqual(stack.currentRoute, -1)
+        XCTAssertNil(stack.currentRouteKey)
     }
 
     func testInitialRouteIsSet() {
         XCTAssertNotNil(stack.initial)
     }
 
-    // MARK: - Push Tests
+    // MARK: - Recording
 
-    func testPushAddsItemToStack() {
-        // Given
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
+    func testRouteRecordsAScreen() {
+        coordinator.route(to: \.first)
 
-        // When
-        stack.push(item)
-
-        // Then
         XCTAssertEqual(stack.value.count, 1)
-        XCTAssertEqual(stack.value.first?.keyPath, 123)
+        XCTAssertEqual(stack.currentRouteKey, .declared(\TestStackCoordinator.first))
     }
 
-    func testPushIgnoresDuplicateConsecutivePushes() {
-        // Given
-        let item1 = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
+    /// Consecutive entry into the same route is a real drill-down (product → related
+    /// product → product), and it used to be dropped on the floor because `push`
+    /// compared the new item's route against the current top.
+    func testConsecutiveSameRouteRecordsBothScreens() {
+        coordinator.route(to: \.withInput, "a")
+        coordinator.route(to: \.withInput, "b")
 
-        // When
-        stack.push(item1)
-        stack.push(item1) // Same keyPath
+        XCTAssertEqual(stack.value.count, 2)
+        XCTAssertEqual(stack.value.map { $0.input as? String }, ["a", "b"])
+    }
 
-        // Then
+    func testImperativeRoutesAreDistinctEvenWithTheSameContent() {
+        coordinator.route(.push, to: Text("x"))
+        coordinator.route(.push, to: Text("x"))
+
+        XCTAssertEqual(stack.value.count, 2)
+        XCTAssertNotEqual(stack.value[0].route, stack.value[1].route)
+    }
+
+    // MARK: - Rewinding
+
+    func testPopLastRemovesOnlyTheTopScreen() {
+        coordinator.route(to: \.first)
+        coordinator.route(to: \.second)
+
+        coordinator.popLast()
+
         XCTAssertEqual(stack.value.count, 1)
+        XCTAssertEqual(stack.currentRouteKey, .declared(\TestStackCoordinator.first))
     }
 
-    func testPushPublishesViaValuePublisher() {
-        // Given
-        let expectation = XCTestExpectation(description: "valuePublisher emitted")
-        var receivedItems: [NavigationStackItem] = []
+    func testPopLastOnAnEmptyStackDoesNothing() {
+        coordinator.popLast()
 
-        let cancellable = stack.valuePublisher
-            .dropFirst() // Skip initial empty value
-            .sink { items in
-                receivedItems = items
-                expectation.fulfill()
-            }
-
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
-
-        // When
-        stack.push(item)
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(receivedItems.count, 1)
-        cancellable.cancel()
-    }
-
-    // MARK: - Pop Tests
-
-    func testPopToIndexRemovesItems() {
-        // Given
-        for i in 0..<5 {
-            let item = NavigationStackItem(
-                presentationType: MockPresentationType(),
-                content: .view(AnyView(Text("Item \(i)"))),
-                keyPath: i,
-                input: nil
-            )
-            stack.push(item)
-        }
-
-        // When
-        stack.popToIndex(2)
-
-        // Then
-        XCTAssertEqual(stack.value.count, 3)
-        XCTAssertEqual(stack.value.last?.keyPath, 2)
-    }
-
-    func testPopToIndexMinusOneClearsStack() {
-        // Given
-        for i in 0..<3 {
-            let item = NavigationStackItem(
-                presentationType: MockPresentationType(),
-                content: .view(AnyView(Text("Item \(i)"))),
-                keyPath: i,
-                input: nil
-            )
-            stack.push(item)
-        }
-
-        // When
-        stack.popToIndex(-1)
-
-        // Then
         XCTAssertEqual(stack.value.count, 0)
     }
 
-    func testPopToIndexPublishesViaPoppedPublisher() {
-        // Given
-        let expectation = XCTestExpectation(description: "poppedPublisher emitted")
-        var poppedIndex: Int?
+    func testPopToRootClearsEverything() {
+        coordinator.route(to: \.first)
+        coordinator.route(to: \.second)
+        coordinator.route(to: \.withInput, "x")
 
-        let cancellable = stack.poppedPublisher
-            .sink { index in
-                poppedIndex = index
-                expectation.fulfill()
-            }
+        coordinator.popToRoot()
 
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
-        stack.push(item)
-
-        // When
-        stack.popToIndex(0)
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(poppedIndex, 0)
-        cancellable.cancel()
+        XCTAssertEqual(stack.value.count, 0)
+        XCTAssertNil(stack.currentRouteKey)
     }
 
-    func testPopToIndexOutOfBoundsIsIgnored() {
-        // Given
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 123,
-            input: nil
-        )
-        stack.push(item)
+    /// `route(_:to:id:)` names a screen so it can be returned to later — the gap
+    /// between `popLast()` (one step) and `popToRoot()` (all the way).
+    func testPopToIdRewindsToTheNamedScreen() {
+        coordinator.route(.push, to: Text("list"), id: "list")
+        coordinator.route(.push, to: Text("detail"))
+        coordinator.route(.push, to: Text("related"))
 
-        // When
-        stack.popToIndex(10) // Out of bounds
+        XCTAssertTrue(coordinator.popTo(id: "list"))
 
-        // Then
-        XCTAssertEqual(stack.value.count, 1) // No change
+        XCTAssertEqual(stack.value.count, 1)
+        XCTAssertEqual(stack.currentRouteKey?.name, "list")
     }
 
-    // MARK: - Stack State Tests
+    /// The nearest match, not the first — "go back to the list" means the one you just
+    /// came from. `focusFirst` deliberately does the opposite.
+    func testPopToIdRewindsToTheNearestMatch() {
+        coordinator.route(.push, to: Text("list 1"), id: "list")
+        coordinator.route(.push, to: Text("detail"))
+        coordinator.route(.push, to: Text("list 2"), id: "list")
+        coordinator.route(.push, to: Text("related"))
 
-    func testCurrentRouteReturnsLastItemKeyPath() {
-        // Given
-        for i in 0..<3 {
-            let item = NavigationStackItem(
-                presentationType: MockPresentationType(),
-                content: .view(AnyView(Text("Item \(i)"))),
-                keyPath: i * 100,
-                input: nil
-            )
-            stack.push(item)
-        }
+        XCTAssertTrue(coordinator.popTo(id: "list"))
 
-        // Then
-        XCTAssertEqual(stack.currentRoute, 200)
+        XCTAssertEqual(stack.value.count, 3)
     }
 
-    func testIsInStackFindsExistingKeyPath() {
-        // Given
-        let item = NavigationStackItem(
-            presentationType: MockPresentationType(),
-            content: .view(AnyView(Text("Test"))),
-            keyPath: 999,
-            input: nil
-        )
-        stack.push(item)
+    func testPopToUnknownIdReportsFailureAndChangesNothing() {
+        coordinator.route(.push, to: Text("detail"))
 
-        // Then
-        XCTAssertTrue(stack.isInStack(999))
-        XCTAssertFalse(stack.isInStack(111))
+        XCTAssertFalse(coordinator.popTo(id: "nope"))
+        XCTAssertEqual(stack.value.count, 1)
     }
 
-    // MARK: - Dismissal Action Tests
+    // MARK: - onDismiss
 
-    func testDismissalActionIsStored() {
-        // Given
-        let expectation = XCTestExpectation(description: "Dismissal action called")
+    /// The closure belongs to the screen being opened, not to the one below it. Keying
+    /// it by "current top index" is why routing from inside a dismissal handler used to
+    /// be truncated by the very pop that triggered it.
+    func testOnDismissFiresForTheScreenItWasAttachedTo() {
+        var fired: [String] = []
+        coordinator.route(.push, to: Text("a"), onDismiss: { fired.append("a") })
+        coordinator.route(.push, to: Text("b"), onDismiss: { fired.append("b") })
 
-        stack.dismissalAction[0] = {
-            expectation.fulfill()
-        }
+        coordinator.popLast()
+        XCTAssertEqual(fired, ["b"])
 
-        // When
-        stack.dismissalAction[0]?()
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
+        coordinator.popLast()
+        XCTAssertEqual(fired, ["b", "a"])
     }
 
-    // MARK: - NavigationRoot Tests
+    /// Deepest first: an `onDismiss` that navigates should see the stack it is landing
+    /// on, not one still holding screens that are on their way out.
+    func testMultiLevelRewindReportsDeepestFirst() {
+        var fired: [String] = []
+        coordinator.route(.push, to: Text("a"), onDismiss: { fired.append("a") })
+        coordinator.route(.push, to: Text("b"), onDismiss: { fired.append("b") })
+        coordinator.route(.push, to: Text("c"), onDismiss: { fired.append("c") })
+
+        coordinator.popToRoot()
+
+        XCTAssertEqual(fired, ["c", "b", "a"])
+    }
+
+    /// A screen opened from a dismissal handler has to survive the rewind that ran it.
+    func testRoutingFromOnDismissSurvives() {
+        coordinator.route(.push, to: Text("a"))
+        coordinator.route(.push, to: Text("b"), id: "b", onDismiss: { [weak coordinator] in
+            coordinator?.route(.push, to: Text("c"), id: "c")
+        })
+
+        coordinator.popLast()
+
+        XCTAssertEqual(stack.value.map(\.route.name), [nil, "c"])
+    }
+
+    // MARK: - Queries
+
+    func testIsInStackFindsADeclaredRoute() {
+        coordinator.route(to: \.first)
+
+        XCTAssertTrue(stack.isInStack(\TestStackCoordinator.first))
+        XCTAssertFalse(stack.isInStack(\TestStackCoordinator.second))
+    }
+
+    /// The `Int` API is deprecated but still shipped, and the testbed reads it.
+    func testDeprecatedHashBasedQueriesStillAnswer() {
+        coordinator.route(to: \.first)
+
+        XCTAssertEqual(stack.currentRoute, (\TestStackCoordinator.first).hashValue)
+        XCTAssertTrue(stack.isInStack((\TestStackCoordinator.first).hashValue))
+
+        coordinator.popToRoot()
+        XCTAssertEqual(stack.currentRoute, -1)
+    }
+
+    // MARK: - NavigationRoot
 
     func testNavigationRootItemChildReference() {
         // Given
@@ -292,9 +254,24 @@ final class TestStackCoordinator: NavigationCoordinatable {
     let stack = CoordinatorStack<TestStackCoordinator>(initial: \.main)
 
     @Root var main = makeMain
+    @Route(.push) var first = makeFirst
+    @Route(.push) var second = makeSecond
+    @Route(.push) var withInput = makeWithInput
 
     func makeMain() -> some View {
         Text("Main")
+    }
+
+    func makeFirst() -> some View {
+        Text("First")
+    }
+
+    func makeSecond() -> some View {
+        Text("Second")
+    }
+
+    func makeWithInput(_ input: String) -> some View {
+        Text(input)
     }
 }
 
