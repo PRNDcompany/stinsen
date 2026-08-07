@@ -304,6 +304,33 @@ final class NavigationCoordinatableTests: XCTestCase {
         XCTAssertEqual(fired, 1)
     }
 
+    // MARK: - Dismissing twice
+
+    /// Asking a coordinator to dismiss itself twice.
+    ///
+    /// This is what a double tap on a "Done" button looks like, and it is not a
+    /// programmer error. The refactor deleted `DismissingCoordinators`, the guard that
+    /// used to swallow the second call, on the grounds that unwinding is idempotent —
+    /// which it is. The question this test exists to answer is whether anything *else*
+    /// on that path minds being asked twice.
+    func testDismissCoordinator_twice_isNotAnError() {
+        let child = coordinator.route(to: \.childCoordinator)
+        let concrete = child.unwrap(TestChildCoordinator.self)
+        XCTAssertNotNil(concrete)
+        XCTAssertEqual(coordinator.stack.value.count, 1)
+
+        concrete?.dismissCoordinator()
+        XCTAssertEqual(coordinator.stack.value.count, 0)
+
+        var secondActionRan = false
+        concrete?.dismissCoordinator { secondActionRan = true }
+
+        XCTAssertEqual(coordinator.stack.value.count, 0,
+            "dismissing an already-dismissed coordinator must stay a no-op")
+        XCTAssertTrue(secondActionRan,
+            "the completion still runs — what the caller wanted closed is closed")
+    }
+
     // MARK: - Memory Management Tests
 
     func testWeakParentReference() {

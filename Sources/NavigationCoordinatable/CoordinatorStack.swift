@@ -11,7 +11,16 @@ import UIKit
 @MainActor
 public class CoordinatorStack<T: NavigationCoordinatable> {
 
-    weak var parent: ChildDismissable?
+    weak var parent: ChildDismissable? {
+        didSet { if parent != nil { hasHadParent = true } }
+    }
+
+    /// Whether this coordinator was ever presented by another one.
+    ///
+    /// Distinguishes "already dismissed" from "never attached", which `parent == nil`
+    /// alone cannot. Not weak, and deliberately never reset: the question is about the
+    /// coordinator's history, not its current state.
+    private(set) var hasHadParent = false
 
     /// Owned here rather than by a view controller: the coordinator outlives any
     /// particular rendering of itself, and screens routed to before the first render

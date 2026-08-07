@@ -259,10 +259,18 @@ public extension NavigationCoordinatable {
         // coordinator inside the box — so both sides are unwrapped before comparing.
         let target = coordinatorInstance(coordinator)
         guard let index = stack.value.firstIndex(where: { $0.childObject === target }) else {
-            // Coordinator not found in stack - pop the last item as fallback.
-            // Guesswork, and it closes whatever happens to be on top: removing it is a
-            // behaviour change and lands as its own commit.
-            host.unwind(keepingFirst: stack.value.count - 1, animated: true, completion: action)
+            // Not ours. This used to close the topmost screen instead — a guess, and one
+            // that closed something unrelated: a callback arriving late for a coordinator
+            // that had already gone took down whatever the user had opened since.
+            //
+            // Doing nothing is the honest answer to "close this thing I am not showing".
+            // The action still runs, because the caller asked for something to happen
+            // afterwards and the thing they wanted closed is closed.
+            assertionFailure("""
+                Stinsen: \(type(of: coordinator)) asked \(type(of: self)) to dismiss it, \
+                but it is not one of its screens. Nothing was closed.
+                """)
+            action?()
             return
         }
         host.unwind(keepingFirst: index, animated: true, completion: action)
@@ -270,7 +278,24 @@ public extension NavigationCoordinatable {
 
     func dismissCoordinator(_ action: (() -> ())? = nil) {
         guard let parent = stack.parent else {
-            assertionFailure("dismissCoordinator: no parent and no SwiftUI dismiss available")
+            // No parent has two very different meanings, and treating them the same
+            // turned a double tap into a crash.
+            //
+            // A coordinator that has *had* a parent and no longer does has already been
+            // dismissed — its record was dropped and its parent link cleared. Asking
+            // again is what a second tap on a "Done" button looks like, so it is a no-op,
+            // and the completion still runs because what the caller wanted closed is
+            // closed. The guard that used to swallow this was removed along with the
+            // index-based stack, on the grounds that unwinding is idempotent — which it
+            // is; the trap was on the way to it.
+            if stack.hasHadParent {
+                action?()
+                return
+            }
+            assertionFailure("""
+                Stinsen: \(type(of: self)) was asked to dismiss itself, but it was never \
+                presented by another coordinator, so there is nobody to ask.
+                """)
             return
         }
         parent.dismissChild(coordinator: self, action: action)

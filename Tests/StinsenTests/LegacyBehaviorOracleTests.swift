@@ -6,16 +6,19 @@
 //
 //  Two kinds of tests live here:
 //
-//  1. PINS — assert current behavior that MUST survive the refactor. If one of these
-//     goes red, the refactor changed something it was not supposed to change.
+//  1. PINS — assert behaviour that MUST survive the refactor. If one of these goes red,
+//     the refactor changed something it was not supposed to change.
 //
-//  2. KNOWN DEFECTS — assert the *desired* behavior, marked with XCTExpectFailure.
-//     They fail today (which is expected and green). When the refactor fixes them,
-//     XCTExpectFailure turns the unexpected pass into a red test, forcing whoever
-//     fixed it to delete the marker deliberately. A defect cannot be silently fixed
-//     and it cannot be silently reintroduced.
+//  2. FIXED DEFECTS — each was written first as the *desired* behaviour under
+//     `XCTExpectFailure`, so it failed (and passed the suite) while the defect stood.
+//     Fixing one turned it into an "unexpected pass" and went red, forcing whoever fixed
+//     it to remove the marker deliberately. A defect could not be silently fixed, and now
+//     cannot be silently reintroduced.
 //
-//  Defect IDs (L1..L9) match the plan document.
+//  All four are fixed and every marker is gone — L1 (consecutive same route dropped),
+//  L3 (routing from a dismissal action truncated), L4 (dismissing an unknown coordinator
+//  closed an unrelated screen), L8 (popLast on an empty stack stranded its closure).
+//  Defect IDs match the plan document.
 //
 
 import XCTest
@@ -141,30 +144,36 @@ final class LegacyBehaviorOracleTests: XCTestCase {
             "popLast() with nothing to pop must not strand its completion anywhere")
     }
 
-    // MARK: - KNOWN DEFECTS (desired behavior; XCTExpectFailure until fixed)
+    /// L4 — a stale dismissal used to close whatever the user had opened since.
+    ///
+    /// The route in is a double tap: dismissing a coordinator twice. The first call
+    /// removes it; the second used to reach `dismissChild` with a coordinator no longer
+    /// in the stack, where the "just close the top one" fallback took down whatever had
+    /// been opened in between.
+    ///
+    /// Written as a double tap rather than by handing `dismissChild` a stranger, because
+    /// that is how it actually happens. Passing a coordinator you are not showing is
+    /// programmer error and asserts.
+    func testFixed_L4_dismissingTwice_doesNotCloseWhatWasOpenedSince() {
+        let child = coordinator.route(to: \.childCoordinator)
+        let concrete = child.unwrap(TestChildCoordinator.self)
+        XCTAssertNotNil(concrete)
 
-    /// L4 — `dismissChild` guesses when it cannot find the coordinator, closing an
-    /// unrelated screen. A late-arriving callback for an already-dismissed coordinator
-    /// takes down whatever happens to be on top.
-    func testDefect_L4_dismissChildForUnknownCoordinator_closesUnrelatedScreen() {
+        concrete?.dismissCoordinator()
+        XCTAssertEqual(coordinator.stack.value.count, 0, "precondition: the child is gone")
+
+        // The user opens something else.
         coordinator.route(to: \.detailView)
-        coordinator.route(to: \.secondDetailView)
-        XCTAssertEqual(coordinator.stack.value.count, 2)
-
-        // A coordinator that was never routed to from `coordinator`.
-        let stranger = TestChildCoordinator()
-        coordinator.dismissChild(coordinator: stranger, action: nil)
-
-        // Current behavior, asserted exactly: the "remove the top one" fallback fired and
-        // took down the topmost screen, which has nothing to do with `stranger`.
         XCTAssertEqual(coordinator.stack.value.count, 1)
-        XCTAssertEqual(coordinator.stack.value.last?.route,
-                       .declared(\TestNavigationCoordinator.detailView),
-                       "the unrelated top screen (secondDetailView) was closed")
 
-        XCTExpectFailure("L4: fixed by removing the guessing fallback in stage 4b") {
-            XCTAssertEqual(coordinator.stack.value.count, 2,
-                "Dismissing an unknown coordinator must not mutate the stack")
-        }
+        // The stale second tap arrives.
+        var actionRan = false
+        concrete?.dismissCoordinator { actionRan = true }
+
+        XCTAssertEqual(coordinator.stack.value.count, 1,
+            "a stale dismissal must not close the screen opened since")
+        XCTAssertEqual(coordinator.stack.value.last?.route,
+                       .declared(\TestNavigationCoordinator.detailView))
+        XCTAssertTrue(actionRan, "the completion still runs — what it wanted closed is closed")
     }
 }
