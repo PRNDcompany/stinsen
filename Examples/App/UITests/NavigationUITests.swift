@@ -27,6 +27,18 @@ final class NavigationUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting-authenticated"]
+
+        // The same suite, against either entry point.
+        //
+        // Run with `TEST_RUNNER_STINSEN_UIKIT_ENTRY=1` and the app boots from a
+        // `SceneDelegate` — `window.rootViewController = MainCoordinator().viewController()`
+        // — instead of a SwiftUI `App`. Nothing else changes: same screens, same routes,
+        // same assertions. That the tests do not need to know which one they are running
+        // against is the claim, and running them twice is the only way to check it.
+        if ProcessInfo.processInfo.environment["STINSEN_UIKIT_ENTRY"] == "1" {
+            app.launchArguments.append("--uikit-entry")
+        }
+
         app.launch()
         openTestbed()
     }

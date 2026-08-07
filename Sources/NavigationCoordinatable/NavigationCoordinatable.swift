@@ -319,6 +319,22 @@ public extension NavigationCoordinatable {
         return AnyView(NavigationCoordinatableView(coordinator: self))
     }
 
+    /// The coordinator wrapped in a navigation controller, ready to be a window's root.
+    ///
+    /// ```swift
+    /// // SceneDelegate
+    /// window.rootViewController = MainCoordinator().navigationController()
+    /// ```
+    ///
+    /// Use this when the coordinator's routes include `.push` — a push needs a
+    /// navigation controller in scope, and nothing else in a plain UIKit app is going to
+    /// provide one. `viewController()` is the right entry point for a coordinator that
+    /// only presents modally, or one that is being placed inside navigation the app
+    /// already owns.
+    func navigationController() -> UINavigationController {
+        UINavigationController(rootViewController: viewController())
+    }
+
     @discardableResult func popToRoot(_ action: (() -> ())? = nil) -> Self {
         host.reconcile()
         host.unwind(keepingFirst: 0, animated: true, completion: action)

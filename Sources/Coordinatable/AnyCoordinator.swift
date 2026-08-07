@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 // MARK: - Abstract base class
 //
@@ -8,6 +9,10 @@ import SwiftUI
 // Coordinatable의 MainActor 요구사항(view/parent/dismissChild)만 @MainActor로 명시한다.
 fileprivate nonisolated class _AnyCoordinatorBase: Coordinatable {
     @MainActor func view() -> AnyView {
+        fatalError("must override")
+    }
+
+    @MainActor func viewController() -> UIViewController {
         fatalError("must override")
     }
 
@@ -53,6 +58,10 @@ fileprivate nonisolated final class _AnyCoordinatorBox<Base: Coordinatable>: _An
         self.base.view()
     }
 
+    @MainActor override func viewController() -> UIViewController {
+        self.base.viewController()
+    }
+
     @MainActor override var parent: ChildDismissable? {
         get { base.parent }
         set { base.parent = newValue }
@@ -87,6 +96,15 @@ public nonisolated final class AnyCoordinator: Coordinatable {
 
     @MainActor public func view() -> AnyView {
         box.view()
+    }
+
+    /// Forwarded rather than inherited from the protocol default.
+    ///
+    /// The default hosts `view()` in a `UIHostingController`, which would wrap the
+    /// erased coordinator's own view controller in a second one — and for a coordinator
+    /// whose screens are UIKit, that wrapper is exactly what routing to it should avoid.
+    @MainActor public func viewController() -> UIViewController {
+        box.viewController()
     }
 
     nonisolated public var id: String {

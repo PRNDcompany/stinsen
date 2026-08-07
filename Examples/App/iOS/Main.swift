@@ -6,8 +6,19 @@ import Stinsen
 
 @main
 struct MainApp {
+    /// Boots the same coordinator through either runtime's entry point.
+    ///
+    /// `--uikit-entry` starts from a `SceneDelegate` that sets
+    /// `window.rootViewController = MainCoordinator().viewController()`; without it the
+    /// app starts from a SwiftUI `App` rendering `MainCoordinator().view()`.
+    ///
+    /// This exists so the UI tests can run **unchanged** against both. The screens, the
+    /// routes and the assertions are identical either way — which is precisely the claim
+    /// being made, and it is not one that can be checked by reading the code.
     static func main() {
-        if #available(iOS 14.0, *) {
+        let usesUIKitEntry = CommandLine.arguments.contains("--uikit-entry")
+
+        if #available(iOS 14.0, *), !usesUIKitEntry {
             StinsenApp.main()
         } else {
             UIApplicationMain(
@@ -42,14 +53,14 @@ class DefaultSceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
 
-        let contentView = MainCoordinator().view()
-        
-        if let windowScene = scene as? UIWindowScene {
-            let window = UIWindow(windowScene: windowScene)
-            window.rootViewController = UIHostingController(rootView: contentView)
-            self.window = window
-            window.makeKeyAndVisible()
-        }
+        let window = UIWindow(windowScene: windowScene)
+        // No `UIHostingController` in sight. This used to read
+        // `UIHostingController(rootView: MainCoordinator().view())` — a UIKit app had to
+        // host the coordinator itself, because SwiftUI was the only way in.
+        window.rootViewController = MainCoordinator().viewController()
+        self.window = window
+        window.makeKeyAndVisible()
     }
 }
