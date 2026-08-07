@@ -53,61 +53,6 @@ struct TestbedEnvironmentObjectScreen: View {
         return vc
     }
 
-    /// The back-to-back matrix, written with the **imperative** API — the recommended
-    /// style. `route(.push, to: someView)` needs no `@Route` declaration, so the screen
-    /// is built at the call site.
-    ///
-    /// Two properties fall out of that and both matter here:
-    ///  - Imperative routes mint a fresh id every call, so the "same route twice in a
-    ///    row is dropped" behaviour (L1) does not apply. Push → Push needs no second
-    ///    declared route to work.
-    ///  - ...which also means imperative routes have **no double-tap protection**. The
-    ///    host serialises transitions but does not coalesce them, so a double tap
-    ///    produces two screens — exactly as in plain UIKit, where debouncing is the
-    ///    app's job.
-    ///
-    /// **Buttons are only ever appended, never inserted.** Reaching one that sits below
-    /// the fold means scrolling first, and a screen that is scrolled when a custom
-    /// containment presentation attaches to it puts that presentation's own controls out
-    /// of reach. Moving an existing button down therefore breaks tests that have nothing
-    /// to do with it — measured, not theorised.
-    private var combos: [(id: String, title: String, action: () -> Void)] {
-        [
-            ("PopThenPush", "Pop → Push", {
-                coordinator.popLast()
-                coordinator.route(.push, to: coordinator.makeScreen())
-            }),
-            ("PopThenPresent", "Pop → Present", {
-                coordinator.popLast()
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-            }),
-            ("PopToRootThenPush", "PopToRoot → Push", {
-                coordinator.popToRoot()
-                coordinator.route(.push, to: coordinator.makeScreen())
-            }),
-            ("PopToRootThenPresent", "PopToRoot → Present", {
-                coordinator.popToRoot()
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-            }),
-            ("PushThenPush", "Push → Push", {
-                coordinator.route(.push, to: coordinator.makeScreen())
-                coordinator.route(.push, to: coordinator.makeScreen())
-            }),
-            ("PushThenPresent", "Push → Present", {
-                coordinator.route(.push, to: coordinator.makeScreen())
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-            }),
-            ("PresentThenPush", "Present → Push", {
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-                coordinator.route(.push, to: coordinator.makeScreen())
-            }),
-            ("PresentThenPresent", "Present → Present", {
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-                coordinator.route(.modal, to: coordinator.makeScreenInNavigationView())
-            }),
-        ]
-    }
-
     var body: some View {
         ScrollView {
             VStack {
@@ -158,16 +103,16 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("ResetLifecycleLog")
 
-                // Pop controls live near the top on purpose. This screen is several
-                // screenfuls long, and when it is presented as an overlay there are two
-                // nested scroll views — so "scroll until the button is hittable" is not
-                // reliable for anything far down. Every test needs these, so they must
-                // be reachable without scrolling at all.
+                // Everything below has to be reachable from *any* depth, because this
+                // screen is self-similar: a push shows another one of it, so a test
+                // driving a chain taps these at every level. One-off scenarios live on
+                // `TestbedScenariosScreen` instead — keeping them here made this screen
+                // thirty controls long and duplicated all of them at every depth.
                 HStack {
-                    Button("Pop last") { coordinator.popLast() }
+                    RoundedButton("Pop last") { coordinator.popLast() }
                         .accessibilityIdentifier("PopLast")
                     Spacer()
-                    Button("Pop to root") { coordinator.popToRoot() }
+                    RoundedButton("Pop to root") { coordinator.popToRoot() }
                         .accessibilityIdentifier("PopToRoot")
                 }
                 .padding(.horizontal, 18)
@@ -185,78 +130,11 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("ShowPush")
 
-                RoundedButton("Modal coordinator") {
-                    coordinator.route(to: \.modalCoordinator)
-                }
-                .accessibilityIdentifier("ShowModalCoordinator")
-
-                RoundedButton("Push coordinator") {
-                    coordinator.route(to: \.pushCoordinator)
-                }
-                .accessibilityIdentifier("ShowPushCoordinator")
-
-                // A coordinator embedded as a child view rather than routed to — two
-                // coordinators behind one enclosing view controller.
-                RoundedButton("Embedded coordinator") {
-                    coordinator.route(to: \.embeddedCoordinator)
-                }
-                .accessibilityIdentifier("ShowEmbeddedCoordinator")
-
-                // A custom presentation that attaches by child containment rather than
-                // presenting. Does the lifecycle probe still see it?
-                RoundedButton("Custom overlay") {
-                    coordinator.route(
-                        TestbedEnvironmentObjectCoordinator.overlay,
-                        to: coordinator.makeScreen()
-                    )
-                }
-                .accessibilityIdentifier("ShowCustomOverlay")
-
-                // A screen with no SwiftUI in it. Routed to exactly like any other, which
-                // is the property being demonstrated.
-                RoundedButton("UIKit screen") {
-                    coordinator.route(.push, to: coordinator.makeUIKitScreen())
-                }
-                .accessibilityIdentifier("ShowUIKitScreen")
-
-                RoundedButton("UIKit screen (modal)") {
-                    coordinator.route(.modal, to: coordinator.makeUIKitScreen())
-                }
-                .accessibilityIdentifier("ShowUIKitModal")
-
-                // Switching root while screens are pushed. Appended, never inserted —
-                // see the note on `combos`.
-                RoundedButton("Switch root") {
-                    coordinator.root(\.alternateStart)
-                }
-                .accessibilityIdentifier("SwitchRoot")
-
-                RoundedButton("Switch to UIKit root") {
-                    coordinator.root(\.uikitStart)
-                }
-                .accessibilityIdentifier("SwitchToUIKitRoot")
-
-                // A tab coordinator hosted as a real UITabBarController, presented like
-                // any other screen. Same TabChild state as the SwiftUI TabView rendering.
-                RoundedButton("UIKit tabs") {
-                    coordinator.route(.modal, to: TestbedTabCoordinator().viewController())
-                }
-                .accessibilityIdentifier("ShowUIKitTabs")
-
-                // A UIHostingController the app builds itself, with its own environment.
-                RoundedButton("Own hosting controller") {
-                    coordinator.route(.push, to: coordinator.makeOwnHostingController())
-                }
-                .accessibilityIdentifier("ShowOwnHostingController")
-
                 // Rebuilds the front screen's containment, the way an app managing its
-                // own child view controllers would — and takes the lifecycle probe with
-                // it, since the probe lives in `children`.
+                // own child view controllers would — taking the lifecycle probe with it,
+                // since the probe lives in `children`.
                 RoundedButton("Strip child controllers") {
-                    // The navigation controller's top screen, not `topmostViewController()`
-                    // — that descends into children, and the probe *is* a child, so it
-                    // would land on the probe itself.
-                    guard let nav = Self.topmostViewController()?.navigationController,
+                    guard let nav = TestbedEnvironmentObjectScreen.topmostViewController()?.navigationController,
                           let target = nav.topViewController else { return }
                     for child in target.children {
                         child.willMove(toParent: nil)
@@ -266,37 +144,10 @@ struct TestbedEnvironmentObjectScreen: View {
                 }
                 .accessibilityIdentifier("StripChildControllers")
 
-                Divider().padding(.vertical, 8)
-
-                // MARK: Refactor verification scenarios
-
-                // Back-to-back navigation, every combination.
-                //
-                // Nothing serialises these today: each call mutates the stack and the
-                // observers act on it synchronously, so the second operation is issued
-                // while the first one's UIKit transition is still animating. Whether
-                // that survives is up to UIKit's tolerance for the specific pairing,
-                // which is exactly the kind of thing that works on one iOS version and
-                // silently drops a screen on another.
-                //
-                // Every combo ends in an operation that must produce a NEW screen, so
-                // "did a higher serial appear" is a uniform pass condition.
-                ForEach(combos, id: \.id) { combo in
-                    RoundedButton(combo.title) { combo.action() }
-                        .accessibilityIdentifier("Combo-" + combo.id)
+                RoundedButton("Scenarios…") {
+                    coordinator.route(.push, to: TestbedScenariosScreen(coordinator: coordinator))
                 }
-
-                // push → modal, so `popToRoot` has to unwind across a presentation
-                // boundary rather than just walking one navigation stack.
-                //
-                // Deliberately NOT two consecutive pushes of the same route: L1 means
-                // `CoordinatorStack.push` silently drops a repeat of the current top,
-                // so the example would be demonstrating the bug instead of the feature.
-                RoundedButton("Build mixed chain") {
-                    coordinator.route(to: \.pushScreen)
-                    coordinator.route(to: \.modalScreen)
-                }
-                .accessibilityIdentifier("BuildMixedChain")
+                .accessibilityIdentifier("ShowScenarios")
 
                 // Dismiss/pop straight through UIKit, without telling Stinsen.
                 // This is what happens whenever anything outside the coordinator closes

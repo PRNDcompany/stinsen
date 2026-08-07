@@ -62,7 +62,14 @@ public enum Screen {
         case .coordinator(let coordinator):
             return coordinator.view()
         case .viewController(let viewController):
-            return AnyView(ScreenRepresentable(viewController: viewController))
+            // Given the whole space on purpose. A `UIViewControllerRepresentable` has no
+            // intrinsic size of its own, so without this it collapses to nothing and the
+            // screen is present but invisible — which looks exactly like a screen that
+            // failed to appear.
+            return AnyView(
+                ScreenRepresentable(viewController: viewController)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
         }
     }
 

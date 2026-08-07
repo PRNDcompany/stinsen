@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1049CC7F5C51B202A0B05225 /* TestbedScenariosScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C50488393BB63353B6DE8E5 /* TestbedScenariosScreen.swift */; };
 		4D9B5F313DE083EFF0534120 /* NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8754C67C2A41A60778F37CE /* NavigationUITests.swift */; };
+		D7162C74D961B4D0EC7B9706 /* EmbeddingDemos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E48F02AB1F28A8B448AB1E /* EmbeddingDemos.swift */; };
 		EB24976426C9192200A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976326C9192200A4C2D4 /* Stinsen */; };
 		EB24976626C9192800A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976526C9192800A4C2D4 /* Stinsen */; };
 		EB24976A26C9193500A4C2D4 /* Stinsen in Frameworks */ = {isa = PBXBuildFile; productRef = EB24976926C9193500A4C2D4 /* Stinsen */; };
@@ -238,6 +240,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1C50488393BB63353B6DE8E5 /* TestbedScenariosScreen.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestbedScenariosScreen.swift; sourceTree = "<group>"; };
+		60E48F02AB1F28A8B448AB1E /* EmbeddingDemos.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmbeddingDemos.swift; sourceTree = "<group>"; };
 		AE6FE772C641B9ACEE38F536 /* StinsenAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StinsenAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8754C67C2A41A60778F37CE /* NavigationUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NavigationUITests.swift; sourceTree = "<group>"; };
 		E10B6CC143980ABA32182438 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
@@ -482,6 +486,8 @@
 				EB42844B272AA20100911C54 /* TestbedEnvironmentObjectScreen.swift */,
 				EB42844C272AA20100911C54 /* TestbedEnvironmentObjectCoordinator+Factory.swift */,
 				EB42844D272AA20100911C54 /* TestbedEnvironmentObjectCoordinator.swift */,
+				60E48F02AB1F28A8B448AB1E /* EmbeddingDemos.swift */,
+				1C50488393BB63353B6DE8E5 /* TestbedScenariosScreen.swift */,
 			);
 			path = TestbedEO;
 			sourceTree = "<group>";
@@ -1096,6 +1102,8 @@
 				EB428503272AA20100911C54 /* CreateTodoScreen.swift in Sources */,
 				EB4284E7272AA20100911C54 /* ProfileCoordinator+Factory.swift in Sources */,
 				EB428521272AA20100911C54 /* User.swift in Sources */,
+				D7162C74D961B4D0EC7B9706 /* EmbeddingDemos.swift in Sources */,
+				1049CC7F5C51B202A0B05225 /* TestbedScenariosScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

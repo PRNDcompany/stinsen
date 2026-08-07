@@ -88,6 +88,59 @@ final class TestbedEnvironmentObjectCoordinator: NavigationCoordinatable {
         UIKitTestbedViewController(coordinator: self, serial: nextScreenSerial())
     }
 
+    /// The back-to-back matrix, written with the **imperative** API — the recommended
+    /// style. `route(.push, to: someView)` needs no `@Route` declaration, so the screen
+    /// is built at the call site.
+    ///
+    /// Two properties fall out of that and both matter:
+    ///  - Imperative routes mint a fresh id every call, so the "same route twice in a row
+    ///    is dropped" behaviour does not apply. Push → Push needs no second declared
+    ///    route to work.
+    ///  - ...which also means imperative routes have **no double-tap protection**. The
+    ///    host serialises transitions but does not coalesce them, so a double tap
+    ///    produces two screens — exactly as in plain UIKit, where debouncing is the
+    ///    app's job.
+    ///
+    /// Lives on the coordinator rather than the screen because it is what the coordinator
+    /// can be asked to do, and the scenarios screen reads it from here.
+    @MainActor
+    var combos: [(id: String, title: String, action: () -> Void)] {
+        [
+            ("PopThenPush", "Pop → Push", { [unowned self] in
+                popLast()
+                route(.push, to: makeScreen())
+            }),
+            ("PopThenPresent", "Pop → Present", { [unowned self] in
+                popLast()
+                route(.modal, to: makeScreenInNavigationView())
+            }),
+            ("PopToRootThenPush", "PopToRoot → Push", { [unowned self] in
+                popToRoot()
+                route(.push, to: makeScreen())
+            }),
+            ("PopToRootThenPresent", "PopToRoot → Present", { [unowned self] in
+                popToRoot()
+                route(.modal, to: makeScreenInNavigationView())
+            }),
+            ("PushThenPush", "Push → Push", { [unowned self] in
+                route(.push, to: makeScreen())
+                route(.push, to: makeScreen())
+            }),
+            ("PushThenPresent", "Push → Present", { [unowned self] in
+                route(.push, to: makeScreen())
+                route(.modal, to: makeScreenInNavigationView())
+            }),
+            ("PresentThenPush", "Present → Push", { [unowned self] in
+                route(.modal, to: makeScreenInNavigationView())
+                route(.push, to: makeScreen())
+            }),
+            ("PresentThenPresent", "Present → Present", { [unowned self] in
+                route(.modal, to: makeScreenInNavigationView())
+                route(.modal, to: makeScreenInNavigationView())
+            }),
+        ]
+    }
+
     /// Every screen gets a number, so UI tests can tell *which* screen is on top.
     /// Without it every testbed screen looks identical to XCUITest and "did the push
     /// actually happen" is unanswerable.
