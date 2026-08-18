@@ -9,7 +9,34 @@ public struct AnyPresentationType: PresentationType {
     /// Forwarded from the wrapped presentation, so erasing does not lose it.
     public var kind: PresentationKind { presentationType.kind }
 
+    /// Whether this library built the presentation, rather than the app.
+    ///
+    /// Not the same question as `kind`, and the difference matters. `kind` is *declared*
+    /// by whoever built the presentation — the initialisers take it as a parameter — so an
+    /// app's own presentation is free to call itself `.push`, and one that does is not a
+    /// push at all. Teardown used to read `kind`: a presentation claiming `.push` was
+    /// batch-popped through UIKit, and its `dismiss` closure — the reverse animation, the
+    /// app's own cleanup — was skipped entirely.
+    ///
+    /// Only the three factories below set this, and only the file that defines them can,
+    /// so it cannot be claimed from outside. `kind` keeps its declared meaning and is
+    /// still what diagnostics read, which is what it is good for: "this was *meant* to be
+    /// a push" is worth saying even when it is wrong.
+    private(set) var isBuiltIn = false
+
     public init(_ presentationType: PresentationType) {
+        // Erasing something already erased returns it unchanged rather than nesting.
+        //
+        // The imperative `route(_:to:)` overloads take an `AnyPresentationType` and pass it
+        // on as a `PresentationType`, so every one of them arrived here to be wrapped a
+        // second time. `kind` survived that because it is computed and forwards; anything
+        // *stored* did not — a second wrapper is a fresh value with default state, and it
+        // buried `isBuiltIn` under itself. So `.modal` reached the host as "not ours", and
+        // the one thing the flag exists to decide was decided the wrong way.
+        if let alreadyErased = presentationType as? AnyPresentationType {
+            self = alreadyErased
+            return
+        }
         self.presentationType = presentationType
     }
 
@@ -69,9 +96,23 @@ extension AnyPresentationType {
 // `route(.push, to: MyViewController())` work at all, and it costs nothing: `make` may
 // still return whatever subclass it likes.
 extension AnyPresentationType {
+
+    /// The same closures as the public initialiser, plus the one thing an app cannot
+    /// claim for itself: that this presentation is the library's own, and so its teardown
+    /// is ours to collapse.
+    private static func builtIn(
+        make: @escaping (AnyView, @escaping () -> Void) -> UIViewController,
+        present: @escaping (UIViewController, UIViewController) -> Void,
+        kind: PresentationKind
+    ) -> AnyPresentationType {
+        var presentation = AnyPresentationType(make: make, present: present, kind: kind)
+        presentation.isBuiltIn = true
+        return presentation
+    }
+
     /// Push presentation using UINavigationController.
     public static var push: AnyPresentationType {
-        AnyPresentationType(
+        builtIn(
             make: { content, _ -> UIViewController in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.navigationController?.pushViewController(viewController, animated: true)
@@ -82,7 +123,7 @@ extension AnyPresentationType {
 
     /// Modal presentation.
     public static var modal: AnyPresentationType {
-        AnyPresentationType(
+        builtIn(
             make: { content, _ -> UIViewController in UIHostingController(rootView: content) },
             present: { parent, viewController in
                 parent.present(viewController, animated: true)
@@ -93,7 +134,7 @@ extension AnyPresentationType {
 
     /// Full-screen modal presentation.
     public static var fullScreen: AnyPresentationType {
-        AnyPresentationType(
+        builtIn(
             make: { content, _ -> UIViewController in
                 let vc = UIHostingController(rootView: content)
                 vc.modalPresentationStyle = .fullScreen

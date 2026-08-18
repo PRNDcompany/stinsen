@@ -15,6 +15,19 @@ import UIKit
 /// `ObjectIdentifier` of a dead object can be reused by a later allocation — so lookups
 /// are `===` over the array. Depth is single digits; this is cheaper than the hashing
 /// would be.
+///
+/// ### What that does and does not cover
+///
+/// For a screen this library *builds* — SwiftUI content, hosted — the weak reference is the
+/// only one there is, so the screen's lifetime really is UIKit's alone.
+///
+/// A screen the app supplied is different, and honestly so: `content` holds the
+/// `UIViewController` the app handed us, strongly, for as long as the record exists. It has
+/// to. A screen can be routed to before there is anywhere to put it — the deep-link case —
+/// and a weakly held view controller would be released before it was ever presented. So
+/// the rule is: **UIKit decides when a screen is off screen; the record decides when it
+/// stops being ours.** The record is dropped by the next reconcile after the screen goes
+/// away, and the app's view controller is released with it.
 @MainActor
 struct RouteRecord {
 
@@ -70,7 +83,14 @@ struct RouteRecord {
 
     var child: (any Coordinatable)? { content.coordinatorValue }
 
+    /// What the presentation says it does. Declared, so only as true as its author made it
+    /// — read for diagnostics, never for teardown. See `isBuiltIn`.
     var kind: PresentationKind { presentation.kind }
+
+    /// Whether the library built this screen's presentation and may therefore take it
+    /// down through UIKit directly. An app's own presentation goes back out through its
+    /// own `dismiss` closure, whatever it decided to call itself.
+    var isBuiltIn: Bool { presentation.isBuiltIn }
 
     init(
         route: RouteKey,

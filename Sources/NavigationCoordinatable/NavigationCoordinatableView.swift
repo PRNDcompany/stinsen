@@ -69,7 +69,7 @@ struct NavigationCoordinatableView<T: NavigationCoordinatable>: View {
 /// .id()-based approach causes. The onChange two-phase commit ensures
 /// SwiftUI applies the removal transition on the visible slot before
 /// swapping activeSlot.
-private struct NavigationRootView<T: NavigationCoordinatable>: View {
+struct NavigationRootView<T: NavigationCoordinatable>: View {
     @ObservedObject var root: NavigationRoot
     @StateObject var context = Context()
 

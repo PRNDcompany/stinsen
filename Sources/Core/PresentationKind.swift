@@ -8,25 +8,29 @@ import Foundation
 /// containment, an overlay, a separate window, or an asynchronous transition, none of
 /// which is guaranteed to show up where we would look for it.
 ///
-/// Two things need this distinction, and neither can be derived from the view
-/// controller's position in the hierarchy:
+/// ### This is a declaration, not a fact
 ///
-/// 1. **Teardown routing.** A custom presentation must be torn down through the app's
-///    own dismiss closure, or whatever it does there — a reverse hero animation, its
-///    own cleanup — is skipped. And the topology cannot tell us that: a custom
-///    presentation that pushed its view controller into a navigation controller looks
-///    exactly like an ordinary `.push`, yet one may be batch-popped through UIKit and
-///    the other may not. This is also what lets `popToRoot` collapse whole runs of
-///    built-in screens in a single UIKit call while still stepping through custom ones
-///    one at a time.
-/// 2. **Diagnostics.** A `.push` with no `UINavigationController` in scope is a real
-///    mistake, and today it is a silent no-op. An opaque closure gives us no way to
-///    know it *intended* to push, so there is nothing to warn about without this.
+/// The initialisers take `kind` as a parameter, so it says what the presentation's author
+/// *meant*, and an app's presentation may declare `.push` while doing something else
+/// entirely. That makes it fit for exactly one job:
 ///
-/// Deliberately **not** a reason: liveness. An earlier draft claimed built-in kinds
-/// need chain-membership checks while custom ones need an attachment check. They do
-/// not — "is this view controller still attached to anything" is correct for every
-/// kind, so liveness is uniform and needs no `kind`.
+/// **Diagnostics.** A `.push` with no `UINavigationController` in scope is a real mistake,
+/// and left alone it is a silent no-op. An opaque closure gives no way to know a push was
+/// even intended, so there is nothing to warn about without this — and a declaration is
+/// good enough to warn on, because being wrong about it is itself worth hearing.
+///
+/// It is deliberately **not** used for:
+///
+/// - **Teardown routing.** Whether a screen may be batch-popped through UIKit or has to go
+///   back out through the app's own `dismiss` closure is a question about who *built* the
+///   presentation, and a declared kind answers a different question. Reading it here meant
+///   an app presentation that called itself `.push` was collapsed into a
+///   `popToViewController` with its own teardown skipped — the reverse animation and the
+///   cleanup simply never ran. `AnyPresentationType.isBuiltIn` answers that instead, and
+///   only this library can set it.
+/// - **Liveness.** An earlier draft claimed built-in kinds need chain-membership checks
+///   while custom ones need an attachment check. They do not — "is this view controller
+///   still attached to anything" is correct for every kind.
 ///
 /// Existing `AnyPresentationType` initialisers default to `.custom`, so app code that
 /// builds its own presentations keeps compiling and keeps working.

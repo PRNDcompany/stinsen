@@ -882,26 +882,11 @@ final class NavigationUITests: XCTestCase {
         assertEmbedding("EmbedSwiftUIInUIKit", flowMarker: "EmbeddedSwiftUIFlow")
     }
 
-    /// The one combination that does not work yet.
-    ///
-    /// A UIKit flow embedded in a UIKit host crosses runtimes twice: asking a
-    /// `NavigationCoordinatable` for a view controller hosts its SwiftUI root view, and
-    /// that root then renders the flow's *UIKit* root back through a representable. The
-    /// screen ends up laid out against a safe area it inherited from three containers up
-    /// — measured at y=805 in an 852pt window, i.e. behind the tab bar, and unreachable.
-    ///
-    /// The layering is what the deferred "host the root as a direct child view
-    /// controller" work removes; a coordinator whose root is a view controller would then
-    /// be added as one, with no SwiftUI in between and nothing to inherit. Marked rather
-    /// than deleted so it cannot be quietly forgotten, and so that fixing it turns this
-    /// red and forces the marker off.
-    ///
-    /// The other three combinations work, including UIKit flows inside SwiftUI hosts —
-    /// the problem is the double crossing, not UIKit content.
+    /// UIKit → UIKit stays native: the coordinator container installs the app's root view
+    /// controller directly, so there is no representable/hosting round trip to distort its
+    /// safe area or move its controls behind the tab bar.
     func testEmbedding_uiKitHost_uiKitFlow() {
-        XCTExpectFailure("a UIKit root embedded in a UIKit host lays out against an inherited safe area") {
-            assertEmbedding("EmbedUIKitInUIKit", flowMarker: "EmbeddedUIKitFlow")
-        }
+        assertEmbedding("EmbedUIKitInUIKit", flowMarker: "EmbeddedUIKitFlow")
     }
 
     // MARK: - Re-entry

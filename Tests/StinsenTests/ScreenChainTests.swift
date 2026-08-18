@@ -38,12 +38,12 @@ final class ScreenChainTests: XCTestCase {
 
     /// A screen that *holds* a navigation controller rather than sitting in one — what
     /// hosting a SwiftUI `NavigationView` produces.
-    private func hostContaining(_ nav: UINavigationController, label: String) -> UIViewController {
+    private func hostContaining(_ contained: UIViewController, label: String) -> UIViewController {
         let host = vc(label)
         _ = host.view
-        host.addChild(nav)
-        host.view.addSubview(nav.view)
-        nav.didMove(toParent: host)
+        host.addChild(contained)
+        host.view.addSubview(contained.view)
+        contained.didMove(toParent: host)
         return host
     }
 
@@ -202,5 +202,56 @@ final class ScreenChainTests: XCTestCase {
         nav.pushViewController(a, animated: false)
 
         XCTAssertEqual(ScreenChain.walk(from: root).map { $0.title }, ["a"])
+    }
+
+    // MARK: - Containers with more than one child
+
+    /// A screen holding a tab bar controller, with a tab other than the first selected.
+    ///
+    /// The search for a held navigation controller was breadth-first over `children`, and
+    /// a tab bar controller's `children` are all of its tabs — so it answered with the
+    /// first tab's stack no matter which tab the user was looking at. Everything
+    /// downstream inherits that: the chain reports screens that are not on screen, and
+    /// the next push goes onto the hidden tab's stack, where it is neither visible nor
+    /// reachable by going back.
+    func testWalk_descendsIntoTheSelectedTabRatherThanTheFirst() {
+        let (firstTabNav, firstTabRoot) = navigationStack()
+        firstTabRoot.title = "tab-0-root"
+        let (secondTabNav, secondTabRoot) = navigationStack()
+        secondTabRoot.title = "tab-1-root"
+
+        let tabs = UITabBarController()
+        tabs.viewControllers = [firstTabNav, secondTabNav]
+        tabs.selectedIndex = 1
+        _ = tabs.view
+
+        let (outerNav, root) = navigationStack()
+        let host = hostContaining(tabs, label: "tabs")
+        outerNav.pushViewController(host, animated: false)
+
+        XCTAssertEqual(ScreenChain.walk(from: root).map { $0.title },
+                       ["tabs", "tab-1-root"],
+                       "the selected tab's stack, not the first tab's")
+    }
+
+    /// And a push into the selected tab is found, since that is where the next one goes.
+    func testWalk_includesScreensPushedInsideTheSelectedTab() {
+        let (firstTabNav, _) = navigationStack()
+        let (secondTabNav, secondTabRoot) = navigationStack()
+        secondTabRoot.title = "tab-1-root"
+        let deep = vc("deep")
+        secondTabNav.pushViewController(deep, animated: false)
+
+        let tabs = UITabBarController()
+        tabs.viewControllers = [firstTabNav, secondTabNav]
+        tabs.selectedIndex = 1
+        _ = tabs.view
+
+        let (outerNav, root) = navigationStack()
+        let host = hostContaining(tabs, label: "tabs")
+        outerNav.pushViewController(host, animated: false)
+
+        XCTAssertEqual(ScreenChain.walk(from: root).map { $0.title },
+                       ["tabs", "tab-1-root", "deep"])
     }
 }

@@ -92,7 +92,7 @@ final class NavigationHost {
         // it is the single screen whose lifecycle is invisible, and it is also the one
         // whose appearance tells a host with nowhere to present that it now has
         // somewhere.
-        ScreenProbe.attach(to: newBase, route: rootRoute, receiver: self)
+        ScreenLifecycleAttachment.attach(to: newBase, route: rootRoute, receiver: self)
         presentPendingRecords()
     }
 
@@ -129,6 +129,7 @@ final class NavigationHost {
         isReconciling = true
         defer { isReconciling = false }
 
+        settlePresentingRecords()
         reattachLostProbes()
 
         let survivors = liveRecords()
@@ -148,6 +149,24 @@ final class NavigationHost {
         presentPendingRecords()
     }
 
+    /// Hands a custom presentation over to UIKit's authority once it has actually attached.
+    ///
+    /// `.presenting` is the state that says "we cannot see this screen yet, so do not
+    /// judge it", and something has to end it. A probe reports the arrival for most
+    /// screens, but a probe is silent inside a container that does not forward appearance
+    /// callbacks — which is an ordinary thing for a custom presentation to attach into. So
+    /// attachment is checked here as well, and a screen that is up is promoted whether or
+    /// not anything announced it.
+    ///
+    /// Without this the exemption never expires: a custom screen closed by any path stays
+    /// in `records` for good, because only `.live` records are subject to UIKit's verdict.
+    private func settlePresentingRecords() {
+        for index in records.indices where records[index].state == .presenting {
+            guard records[index].viewController?.isAttachedToHierarchy == true else { continue }
+            records[index].state = .live
+        }
+    }
+
     /// Puts back any probe that has gone missing from a screen still on the stack.
     ///
     /// A probe is a child view controller, and `children` belongs to the screen, not to
@@ -164,7 +183,7 @@ final class NavigationHost {
         for record in records where record.state == .live {
             guard let viewController = record.viewController,
                   viewController.isAttachedToHierarchy,
-                  ScreenProbe.attached(to: viewController, receiver: self) == nil else { continue }
+                  ScreenLifecycleAttachment.attached(to: viewController, receiver: self) == nil else { continue }
 
             #if DEBUG
             print("""
@@ -173,7 +192,7 @@ final class NavigationHost {
                 Reattaching.
                 """)
             #endif
-            ScreenProbe.attach(to: viewController, route: record.route, receiver: self)?
+            ScreenLifecycleAttachment.attach(to: viewController, route: record.route, receiver: self)?
                 .adoptCurrentState(of: viewController)
         }
     }
@@ -218,9 +237,9 @@ final class NavigationHost {
         for record in removed.reversed() {
             cascadeTeardown(record)
             if let viewController = record.viewController,
-               let probe = ScreenProbe.attached(to: viewController, receiver: self),
-               !probe.isHostVisible,
-               probe.claimDisappearanceReport() {
+               let observation = ScreenLifecycleAttachment.attached(to: viewController, receiver: self),
+               !observation.isHostVisible,
+               observation.claimDisappearanceReport() {
                 lifecycleAware?.screenDidDisappear(record.route, viewController: viewController, reason: .detached)
             }
             record.onDismiss?()
@@ -233,12 +252,27 @@ final class NavigationHost {
         Self.teardownHost(of: child)
     }
 
+    /// Passes the cascade on to whatever coordinators this one is holding.
+    ///
+    /// Every kind of coordinator has to be answered for here, because the cascade is the
+    /// only thing that reaches a coordinator whose screens were removed from a hierarchy it
+    /// was not watching. A kind that is not handled does not fail loudly — it simply keeps
+    /// its screens on the books, never runs their `onDismiss`, and is then left with
+    /// nothing alive to ever reconcile them away.
+    ///
+    /// A tab coordinator was the missing kind. Its tabs are coordinators with hosts and
+    /// records of their own, and unlike a wrapper it holds several — so the cascade fans
+    /// out here rather than following a single child.
     static func teardownHost(of object: AnyObject) {
         let instance = coordinatorInstance(object: object)
         if let navigation = instance as? any NavigationCoordinatable {
             navigation.teardownHost()
         } else if let forwarding = instance as? CoordinatorChildForwarding {
             teardownHost(of: forwarding.forwardedChild)
+        } else if let tabs = instance as? any TabCoordinatable {
+            for child in tabs.tabbedCoordinators {
+                teardownHost(of: child)
+            }
         }
     }
 
@@ -255,11 +289,16 @@ final class NavigationHost {
     }
 
     private func presentPendingRecords() {
-        guard base != nil, transitionToken == nil else { return }
+        guard base != nil else { return }
         // Index-based because presenting mutates the record in place, and because a
         // presentation can append further records re-entrantly.
         var index = 0
         while index < records.count {
+            // Re-checked every iteration, not once on the way in. Presenting one screen
+            // starts a transition and the rest of the queue has to wait for it; reading
+            // the flag only on the way in meant a single drain could hand UIKit several
+            // transitions in one run loop turn, which is what it discards.
+            guard transitionToken == nil else { return }
             if records[index].state == .pending {
                 // Stop at the first one that cannot go up yet. Skipping ahead would put
                 // a later screen on before an earlier one, and the earlier one's context
@@ -329,15 +368,32 @@ final class NavigationHost {
         // A view controller the app supplied is presented as it is; only SwiftUI content
         // is built into one.
         let viewController = record.content.makeViewController(using: record.presentation)
-        ScreenProbe.attach(to: viewController, route: record.route, receiver: self)
+        ScreenLifecycleAttachment.attach(to: viewController, route: record.route, receiver: self)
 
         records[index].viewController = viewController
-        // Built-in presentations attach synchronously, so by the time `presented`
-        // returns the screen is really there. A custom one may not have — it can defer,
-        // animate, or attach from a completion handler — so it stays `.presenting`
-        // until its probe says otherwise. Without that distinction the next reconcile
-        // would find it attached to nothing and delete it mid-presentation.
-        records[index].state = record.kind == .custom ? .presenting : .live
+        // The library's own presentations attach synchronously, so by the time `presented`
+        // returns the screen is really there. An app's may not have — it can defer,
+        // animate, or attach from a completion handler — so it stays `.presenting` until
+        // something observes it arrive. Without that distinction the next reconcile would
+        // find it attached to nothing and delete it mid-presentation.
+        //
+        // Asked as "did we build this", not as "what does it call itself": a presentation
+        // that declares `.push` and then defers is exactly the case that would be marked
+        // live while nothing was on screen.
+        records[index].state = record.isBuiltIn ? .live : .presenting
+
+        // Marked busy *before* control goes to the presentation, not after.
+        //
+        // A presentation is app code, and app code is allowed to navigate. Marking busy
+        // afterwards left a window where anything the presentation did synchronously —
+        // including routing again — ran while the queue still believed it was idle.
+        //
+        // Nothing user-visible was found to break through that window: `resolveContext()`
+        // happened to refuse the second screen anyway, because a just-pushed view
+        // controller is not in a window yet within the same call stack. That is the
+        // accidental protection this whole refactor keeps replacing with a deliberate
+        // one, so the ordering is fixed rather than relied upon.
+        beginTransition(endingWhen: viewController)
 
         let id = record.id
         record.presentation.presented(
@@ -351,7 +407,6 @@ final class NavigationHost {
             // not simply ignored.
             onDismissed: { [weak self] in self?.reconcile() }
         )
-        beginTransition(endingWhen: viewController)
         return true
     }
 
@@ -382,9 +437,21 @@ final class NavigationHost {
         presentPendingRecords()
     }
 
+    /// Promotes a record once there is something on screen for it to be live *as*.
+    ///
+    /// A presentation's `onAppeared` is not evidence of that. The built-in ones hop a run
+    /// loop turn and call it unconditionally, and a custom one may call it whenever it
+    /// likes — so taking it at face value marked a screen live while it was attached to
+    /// nothing, and the next reconcile duly deleted the record and ran its `onDismiss`
+    /// while the presentation was still on its way. That defeated `.presenting` one run
+    /// loop turn after it was set, which is the whole reason the state exists.
+    ///
+    /// The callback is therefore treated as a prompt to look, not as an answer. A
+    /// presentation that attaches later is promoted by `settlePresentingRecords()` instead.
     private func markLive(_ id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         guard records[index].state != .live else { return }
+        guard records[index].viewController?.isAttachedToHierarchy == true else { return }
         records[index].state = .live
     }
 
@@ -440,6 +507,14 @@ final class NavigationHost {
         // presented has no window *yet*, and calling that "unavailable" would stop the
         // retry that is the only thing waiting for it.
         if isTransitioning(context) { return .busy }
+        // A screen arriving that we did not start — the app's own push, or another
+        // coordinator's onto the same navigation controller — was expected to land here
+        // and strand: `.unavailable` means "wait to be told", and the wake-ups are our own
+        // screens' probes, which that screen does not have. It does not strand, because
+        // `isTransitioning` above sees the transition through the shared navigation
+        // controller and asks for a retry instead. Tried to construct a case where the
+        // window check is reached with a foreign screen still on its way and could not, so
+        // there is no extra branch here for one.
         guard context.viewIfLoaded?.window != nil else { return .unavailable }
         return .ready(context)
     }
@@ -514,10 +589,14 @@ final class NavigationHost {
     /// Takes the screens down, newest first, collapsing runs of built-in presentations
     /// into a single UIKit call.
     ///
-    /// Custom presentations are stepped through one at a time because their teardown is
-    /// the app's own code — a reverse hero animation, its own cleanup — and skipping it
-    /// is not an optimisation, it is a bug. With no custom presentation in range the
-    /// whole thing is one run, which is the common case.
+    /// An app's own presentations are stepped through one at a time because their teardown
+    /// is the app's own code — a reverse hero animation, its own cleanup — and skipping it
+    /// is not an optimisation, it is a bug. With none of them in range the whole thing is
+    /// one run, which is the common case.
+    ///
+    /// "Ours" is decided by `isBuiltIn`, never by the declared `kind`. Reading the
+    /// declaration meant an app presentation that called itself `.push` was collapsed into
+    /// a `popToViewController` and never saw its own `dismiss` closure at all.
     private func performTeardown(
         of removed: [RouteRecord],
         downTo target: UIViewController?,
@@ -532,7 +611,7 @@ final class NavigationHost {
         var index = removed.count - 1
         var pendingCompletion = completion
         while index >= 0 {
-            if removed[index].kind == .custom {
+            if !removed[index].isBuiltIn {
                 if let viewController = removed[index].viewController {
                     removed[index].presentation.dismissed(viewController: viewController)
                 }
@@ -541,7 +620,7 @@ final class NavigationHost {
             }
 
             var runStart = index
-            while runStart >= 0 && removed[runStart].kind != .custom {
+            while runStart >= 0 && removed[runStart].isBuiltIn {
                 runStart -= 1
             }
             let anchor = runStart >= 0 ? removed[runStart].viewController : target
@@ -649,9 +728,9 @@ extension NavigationHost: ScreenLifecycleReceiver {
         owner as? any CoordinatorLifecycleAware
     }
 
-    func screenProbeDidObserve(
-        _ event: ScreenProbe.Event,
-        probe: ScreenProbe,
+    func screenLifecycleDidObserve(
+        _ event: ScreenLifecycleEvent,
+        observation: any ScreenLifecycleObservation,
         route: RouteKey,
         host viewController: UIViewController,
         animated: Bool
@@ -670,7 +749,12 @@ extension NavigationHost: ScreenLifecycleReceiver {
         case .willDisappear:
             lifecycleAware?.screenWillDisappear(route, viewController: viewController, animated: animated)
         case .didDisappear(let reason):
-            noteDisappearance(probe: probe, of: viewController, route: route, reason: reason)
+            noteDisappearance(
+                observation: observation,
+                of: viewController,
+                route: route,
+                reason: reason
+            )
         }
     }
 
@@ -694,7 +778,7 @@ extension NavigationHost: ScreenLifecycleReceiver {
     }
 
     private func noteDisappearance(
-        probe: ScreenProbe,
+        observation: any ScreenLifecycleObservation,
         of viewController: UIViewController,
         route: RouteKey,
         reason: ScreenDisappearReason
@@ -706,7 +790,7 @@ extension NavigationHost: ScreenLifecycleReceiver {
             lifecycleAware?.screenDidDisappear(route, viewController: viewController, reason: reason)
             return
         }
-        if probe.claimDisappearanceReport() {
+        if observation.claimDisappearanceReport() {
             lifecycleAware?.screenDidDisappear(route, viewController: viewController, reason: reason)
         }
         reconcile()

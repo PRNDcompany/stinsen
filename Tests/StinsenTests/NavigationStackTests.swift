@@ -207,14 +207,14 @@ final class NavigationStackTests: XCTestCase {
         // Given
         let coordinator = TestStackCoordinator()
         let item = NavigationRootItem(
-            keyPath: 123,
+            route: .named("123"),
             input: "test",
             child: coordinator
         )
 
         // Then
         XCTAssertNotNil(item.child)
-        XCTAssertEqual(item.keyPath, 123)
+        XCTAssertEqual(item.route, .named("123"))
         XCTAssertEqual(item.input as? String, "test")
     }
 
@@ -222,7 +222,7 @@ final class NavigationStackTests: XCTestCase {
         // Given
         let coordinator = TestStackCoordinator()
         let item1 = NavigationRootItem(
-            keyPath: 1,
+            route: .named("1"),
             input: nil,
             child: coordinator
         )
@@ -235,7 +235,7 @@ final class NavigationStackTests: XCTestCase {
 
         // When
         let item2 = NavigationRootItem(
-            keyPath: 2,
+            route: .named("2"),
             input: nil,
             child: coordinator
         )

@@ -99,17 +99,39 @@ extension UIViewController {
 
     /// The nearest navigation controller held *inside* this view controller.
     ///
-    /// Breadth-first, so the outermost one wins when a screen contains several.
+    /// Breadth-first, so the outermost one wins when a screen contains several — but
+    /// never into a container's inactive children. "First" is not "on screen" for a tab
+    /// bar controller or a split view controller, and the answer decides where the next
+    /// screen is pushed: descending into tab 0 while the user is looking at tab 2 pushes
+    /// onto a stack nobody can see, and the push is neither visible nor recoverable.
     var containedNavigationController: UINavigationController? {
-        var queue = children
+        var queue = visibleChildren
         var index = 0
         while index < queue.count {
             let candidate = queue[index]
             index += 1
             if let nav = candidate as? UINavigationController { return nav }
-            queue.append(contentsOf: candidate.children)
+            queue.append(contentsOf: candidate.visibleChildren)
         }
         return nil
+    }
+
+    /// The children worth descending into: a container's active child, or all of them.
+    ///
+    /// Asking the container rather than reading `children` in order, because only the
+    /// container knows which of its children it is showing — and for everything else
+    /// "all of them" is right, since a plain view controller's children are all on screen
+    /// together.
+    private var visibleChildren: [UIViewController] {
+        if let tabs = self as? UITabBarController {
+            return [tabs.selectedViewController].compactMap { $0 }
+        }
+        if let split = self as? UISplitViewController {
+            // The trailing column is the one a push belongs in — the same one UIKit
+            // shows on its own when the display mode collapses to a single column.
+            return [split.viewControllers.last].compactMap { $0 }
+        }
+        return children
     }
 
     /// Whether this view controller is still attached to anything at all.

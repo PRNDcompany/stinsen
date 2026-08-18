@@ -306,7 +306,7 @@ public extension NavigationCoordinatable {
         let presentable = initial.using(coordinator: self, input: self.stack.initialInput as Any)
 
         let item = NavigationRootItem(
-            keyPath: self.stack.initial.hashValue,
+            route: .declared(self.stack.initial),
             input: self.stack.initialInput,
             child: presentable
         )
@@ -344,15 +344,20 @@ public extension NavigationCoordinatable {
         return AnyView(NavigationCoordinatableView(coordinator: self))
     }
 
-    // `viewController()` is inherited: it hosts `view()`, so the root is rendered by
-    // SwiftUI either way and `customize(_:)` — which is a SwiftUI modifier — keeps
-    // applying. The cost is a root that is *itself* a `UIViewController` going through a
-    // representable and a hosting controller to get there.
-    //
-    // Removing those two layers means a container that adds the root as a direct child
-    // view controller, and then `customize(_:)` has nothing to wrap. That is a real
-    // decision about what `customize` means for a UIKit root, not a detail to slip in
-    // alongside something else.
+    /// The coordinator as a UIKit container with its active root as a direct child.
+    ///
+    /// Runtime conversion now happens at the root boundary rather than around the whole
+    /// coordinator: a SwiftUI root gets one `UIHostingController`, while an app-supplied
+    /// `UIViewController` is installed untouched. The container is also the navigation
+    /// anchor, so UIKit entry does not wait for a SwiftUI introspection pass before pending
+    /// routes have somewhere to go.
+    ///
+    /// A SwiftUI root is hosted as one persistent renderer, so `customize(_:)` and SwiftUI
+    /// root transitions still apply to that subtree. A native UIKit root bypasses SwiftUI
+    /// entirely. `configure(_:)` receives the returned container in both cases.
+    func viewController() -> UIViewController {
+        CoordinatorNavigationViewController(coordinator: self)
+    }
 
     /// The coordinator wrapped in a navigation controller, ready to be a window's root.
     ///
@@ -366,6 +371,11 @@ public extension NavigationCoordinatable {
     /// provide one. `viewController()` is the right entry point for a coordinator that
     /// only presents modally, or one that is being placed inside navigation the app
     /// already owns.
+    ///
+    /// - Note: `configure(_:)` receives the coordinator's own view controller, not the
+    ///   `UINavigationController` built around it. Configure the navigation controller at
+    ///   the call site, or reach it as `navigationController` from the root's own
+    ///   `viewWillAppear` — by then it is there.
     func navigationController() -> UINavigationController {
         UINavigationController(rootViewController: viewController())
     }
@@ -717,6 +727,21 @@ public extension NavigationCoordinatable {
         host.unwind(keepingFirst: 0, animated: false)
     }
 
+    /// Builds the root storage if no render has done it yet.
+    ///
+    /// Choosing a root is a launch-time decision as often as a runtime one — check a token,
+    /// pick the flow, then hand the coordinator to the window — and on that path nothing
+    /// has rendered, so the storage the switch writes into does not exist. It trapped
+    /// there, on an implicitly unwrapped nil, which is a crash at launch for the most
+    /// ordinary use of `root(_:)` there is.
+    ///
+    /// The same lazy build the first render does, so neither path depends on the other
+    /// having happened. `route(...)` before the first render is supported for the same
+    /// reason and this is the missing half of it.
+    private func ensureRoot() {
+        if stack.root == nil { setupRoot() }
+    }
+
     @discardableResult private func _root<Output: Coordinatable, Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>,
         input: Input? = nil,
@@ -724,8 +749,9 @@ public extension NavigationCoordinatable {
     ) -> Output {
         let output: Output = _createRouteOutput(route, input: input)
         unwindForRootSwitch()
-        let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: output)
+        let newItem = NavigationRootItem(route: .declared(route), input: input, child: output)
         let rootSwitch = self[keyPath: route].type
+        ensureRoot()
         stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return output
     }
@@ -737,8 +763,9 @@ public extension NavigationCoordinatable {
     ) -> Self {
         let output: Output = _createRouteOutput(route, input: input)
         unwindForRootSwitch()
-        let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: AnyView(output))
+        let newItem = NavigationRootItem(route: .declared(route), input: input, child: AnyView(output))
         let rootSwitch = self[keyPath: route].type
+        ensureRoot()
         stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return self
     }
@@ -750,8 +777,9 @@ public extension NavigationCoordinatable {
     ) -> Self {
         let output: Screen = _createRouteOutput(route, input: input)
         unwindForRootSwitch()
-        let newItem = NavigationRootItem(keyPath: route.hashValue, input: input, child: output)
+        let newItem = NavigationRootItem(route: .declared(route), input: input, child: output)
         let rootSwitch = self[keyPath: route].type
+        ensureRoot()
         stack.root.updateItem(newItem, animation: animation, transition: rootSwitch.transition, zOrder: rootSwitch.zOrder)
         return self
     }
@@ -785,7 +813,7 @@ public extension NavigationCoordinatable {
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>
     ) -> Output? {
         guard let item = stack.root?.activeSlot?.item,
-              item.keyPath == route.hashValue else { return nil }
+              item.route == .declared(route) else { return nil }
         return item.child as? Output
     }
 
@@ -793,7 +821,7 @@ public extension NavigationCoordinatable {
     func hasRoot<Input, Output: View>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Output>>
     ) -> Bool {
-        stack.root?.activeSlot?.item.keyPath == route.hashValue
+        stack.root?.activeSlot?.item.route == .declared(route)
     }
 
     @discardableResult func root<Output: Coordinatable>(
@@ -873,7 +901,7 @@ public extension NavigationCoordinatable {
     func hasRoot<Input>(
         _ route: KeyPath<Self, Transition<Self, RootSwitch, Input, Screen>>
     ) -> Bool {
-        stack.root?.activeSlot?.item.keyPath == route.hashValue
+        stack.root?.activeSlot?.item.route == .declared(route)
     }
 
     // MARK: - Animation overloads (call-site animation, default params not allowed in protocol)

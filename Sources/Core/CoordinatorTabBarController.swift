@@ -13,7 +13,7 @@ import UIKit
 /// it is written by both sides — `focusFirst`, `selectTab`, and the user tapping a tab —
 /// so each direction guards against echoing the other back.
 @MainActor
-final class CoordinatorTabBarController: UITabBarController {
+final class CoordinatorTabBarController: UITabBarController, ScreenLifecycleReporting {
 
     /// Strong on purpose: this view controller *is* the coordinator's UIKit
     /// representation, so it has to keep it alive the way the SwiftUI view does.
@@ -26,6 +26,8 @@ final class CoordinatorTabBarController: UITabBarController {
 
     private let child: TabChild
     private var subscription: AnyCancellable?
+
+    let screenLifecycleReporter = ScreenLifecycleReporter()
 
     /// Set while responding to the other side, so a change does not bounce back.
     private var isSyncing = false
@@ -47,33 +49,30 @@ final class CoordinatorTabBarController: UITabBarController {
         fatalError("init(coder:) is not supported")
     }
 
-    // MARK: - Appearance forwarding
+    // MARK: - Appearance reporting
     //
-    // A tab bar controller does not forward appearance callbacks to its children — it
-    // decides which child is appearing, and a lifecycle probe is not one of its tabs. So
-    // the probes are driven explicitly; without this a coordinator presented as a tab bar
-    // controller would report no lifecycle at all.
-
-    private var probes: [UIViewController] { children.filter { $0 is ScreenProbe } }
+    // A library-owned container can report itself. This avoids adding an invisible child
+    // that `UITabBarController` would not forward to anyway, and avoids loading the tab bar
+    // controller merely to attach that child's view before it is presented.
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        probes.forEach { $0.beginAppearanceTransition(true, animated: animated) }
+        screenLifecycleReporter.viewWillAppear(self, animated: animated)
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        probes.forEach { $0.endAppearanceTransition() }
+        screenLifecycleReporter.viewDidAppear(self, animated: animated)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        probes.forEach { $0.beginAppearanceTransition(false, animated: animated) }
+        screenLifecycleReporter.viewWillDisappear(self, animated: animated)
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        probes.forEach { $0.endAppearanceTransition() }
+        screenLifecycleReporter.viewDidDisappear(self, animated: animated)
     }
 
     private func installTabs() {
@@ -81,8 +80,15 @@ final class CoordinatorTabBarController: UITabBarController {
         viewControllers = items.map { item in
             let screen = item.presentable.viewController()
             if let barItem = item.tabBarItem() {
+                // The declaration wins: the parent decides how a child is presented, and a
+                // tab item is part of that. A child that also set one in `configure(_:)`
+                // loses here, which is the right way round.
                 screen.tabBarItem = barItem
-            } else {
+            } else if screen.tabBarItem.title == nil, screen.tabBarItem.image == nil {
+                // Nothing declared *and* nothing the child set for itself. Checked rather
+                // than assumed, because a coordinator tab can supply its own item from
+                // `configure(_:)` — warning about a blank tab that is not blank is worse
+                // than saying nothing.
                 warnAboutMissingTabBarItem(for: screen)
             }
             return screen
@@ -100,7 +106,7 @@ final class CoordinatorTabBarController: UITabBarController {
             Stinsen: the tab showing \(type(of: screen)) was declared with a SwiftUI \
             `tabItem:` only, so there is nothing to build a UITabBarItem from and it will \
             appear blank. Declare it with `tabBarItem:` as well to use this coordinator \
-            through `viewController()`.
+            through `viewController()`, or have the tab set its own in `configure(_:)`.
             """)
         #endif
     }

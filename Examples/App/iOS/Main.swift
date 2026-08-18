@@ -51,6 +51,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 class DefaultSceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    private var coordinator: MainCoordinator?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -59,8 +60,15 @@ class DefaultSceneDelegate: UIResponder, UIWindowSceneDelegate {
         // No `UIHostingController` in sight. This used to read
         // `UIHostingController(rootView: MainCoordinator().view())` — a UIKit app had to
         // host the coordinator itself, because SwiftUI was the only way in.
-        window.rootViewController = MainCoordinator().viewController()
+        let coordinator = MainCoordinator()
+        self.coordinator = coordinator
+        window.rootViewController = coordinator.viewController()
         self.window = window
         window.makeKeyAndVisible()
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let url = URLContexts.first?.url else { return }
+        coordinator?.handle(url)
     }
 }

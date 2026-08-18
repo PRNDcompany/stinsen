@@ -48,7 +48,21 @@ public enum Screen {
         case .view(let view):
             return presentation.makeViewController(content: view)
         case .coordinator(let coordinator):
-            return presentation.makeViewController(content: coordinator.view())
+            // A coordinator already answers "what am I, as a view controller", and for the
+            // library's own presentations that is the answer to use. Going through
+            // `view()` instead threw it away: a `TabCoordinatable` presented modally came
+            // back as a hosting controller wrapped around a SwiftUI `TabView` — no
+            // `UITabBarItem` to configure, no delegate to hook — in an app that had asked
+            // UIKit for everything else. Which is also the stated policy of this type,
+            // applied to the case that was skipping it: resolve at the edge that needs it,
+            // in the runtime doing the presenting.
+            //
+            // An app's own presentation keeps building the container itself, because it is
+            // typed to whatever its `make` closure returns and cannot be handed something
+            // else.
+            return presentation.isBuiltIn
+                ? coordinator.viewController()
+                : presentation.makeViewController(content: coordinator.view())
         case .viewController(let viewController):
             return viewController
         }

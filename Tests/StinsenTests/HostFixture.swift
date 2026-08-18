@@ -40,7 +40,12 @@ final class HostFixture {
         window.layoutIfNeeded()
 
         coordinator.host.bind(base: base)
-        precondition(coordinator.host.presentationContext() != nil,
+        // Asks about the fixture, not about the queue. `presentationContext()` used to
+        // stand in for this and conflated two things: a coordinator that already had a
+        // screen recorded puts it up during `bind`, and from inside that transition the
+        // context is legitimately nil — so a fixture built for a deep-link test tripped a
+        // precondition about being off screen while being perfectly on screen.
+        precondition(base.viewIfLoaded?.window != nil,
                      "fixture is not on screen; the coordinator would have nowhere to present")
     }
 
@@ -52,6 +57,24 @@ final class HostFixture {
     /// than the behaviour it is asking about. Tests wait the same way a user does.
     func settle(_ duration: TimeInterval = 0.8) {
         RunLoop.current.run(until: Date().addingTimeInterval(duration))
+    }
+
+    /// Pumps the run loop until `condition` holds, then stops.
+    ///
+    /// Preferred over `settle(_:)` wherever a test is waiting for one specific outcome. A
+    /// fixed duration is a bet that the machine is as idle as it was when the number was
+    /// chosen: a push takes about a third of a second on its own, plus whatever the queue
+    /// waits before retrying, and running the suite makes both longer. When that bet loses
+    /// the failure reads as the behaviour being wrong rather than the wait being short,
+    /// which is the most expensive kind of test to own.
+    ///
+    /// Returns as soon as the condition holds, so a passing test also stops paying for the
+    /// wait it did not need.
+    func settle(until condition: () -> Bool, timeout: TimeInterval = 3) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
     }
 
     deinit {

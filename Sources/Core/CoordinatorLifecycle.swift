@@ -71,19 +71,204 @@ public extension CoordinatorLifecycleAware {
     func screenDidDisappear(_ route: RouteKey, viewController: UIViewController, reason: ScreenDisappearReason) {}
 }
 
-// MARK: - Probe
+// MARK: - Observation
 
-/// Receives lifecycle events observed by a `ScreenProbe`.
+/// Receives lifecycle events from either an injected probe or a Stinsen-owned container.
 @MainActor
 protocol ScreenLifecycleReceiver: AnyObject {
-    func screenProbeDidObserve(
-        _ event: ScreenProbe.Event,
-        probe: ScreenProbe,
+    func screenLifecycleDidObserve(
+        _ event: ScreenLifecycleEvent,
+        observation: any ScreenLifecycleObservation,
         route: RouteKey,
         host: UIViewController,
         animated: Bool
     )
 }
+
+/// One receiver's claim on a screen's lifecycle.
+///
+/// An app-owned view controller is observed by a `ScreenProbe`. A container owned by
+/// Stinsen reports its own appearance instead, because injecting a child probe would load
+/// the container before UIKit has attached it to its navigation hierarchy. The host only
+/// needs these pieces of state, so both mechanisms meet behind this protocol.
+@MainActor
+protocol ScreenLifecycleObservation: AnyObject {
+    var isHostVisible: Bool { get }
+    func adoptCurrentState(of host: UIViewController)
+    func claimDisappearanceReport() -> Bool
+}
+
+@MainActor
+enum ScreenLifecycleEvent {
+    case willAppear
+    case didAppear
+    case willDisappear
+    case didDisappear(ScreenDisappearReason)
+}
+
+/// Adopted by Stinsen-owned containers that can report appearance without a child probe.
+@MainActor
+protocol ScreenLifecycleReporting: AnyObject {
+    var screenLifecycleReporter: ScreenLifecycleReporter { get }
+}
+
+/// Chooses the least invasive observation mechanism a screen supports.
+///
+/// Library containers report directly. Everything else remains observable without
+/// subclassing or swizzling through the existing child-controller probe.
+@MainActor
+enum ScreenLifecycleAttachment {
+    static func attached(
+        to viewController: UIViewController,
+        receiver: ScreenLifecycleReceiver
+    ) -> (any ScreenLifecycleObservation)? {
+        if let reporting = viewController as? any ScreenLifecycleReporting {
+            return reporting.screenLifecycleReporter.observation(for: receiver)
+        }
+        return ScreenProbe.attached(to: viewController, receiver: receiver)
+    }
+
+    @discardableResult
+    static func attach(
+        to viewController: UIViewController,
+        route: RouteKey,
+        receiver: ScreenLifecycleReceiver
+    ) -> (any ScreenLifecycleObservation)? {
+        if let reporting = viewController as? any ScreenLifecycleReporting {
+            return reporting.screenLifecycleReporter.attach(
+                to: viewController,
+                route: route,
+                receiver: receiver
+            )
+        }
+        return ScreenProbe.attach(to: viewController, route: route, receiver: receiver)
+    }
+}
+
+/// Appearance fan-out for a Stinsen-owned container.
+///
+/// There can be more than one observer: the coordinator represented by the container
+/// watches its root, while the parent coordinator watches the container as one of its
+/// routed screens. Each gets an independent disappearance claim.
+@MainActor
+final class ScreenLifecycleReporter {
+    private var observations: [DirectScreenLifecycleObservation] = []
+
+    private weak var owningNavigationController: UINavigationController?
+    private weak var owningNavigationEntry: UIViewController?
+    private weak var owningHostContainer: UIViewController?
+
+    func observation(for receiver: ScreenLifecycleReceiver) -> (any ScreenLifecycleObservation)? {
+        removeDeadObservations()
+        return observations.first { $0.receiver === receiver }
+    }
+
+    func attach(
+        to host: UIViewController,
+        route: RouteKey,
+        receiver: ScreenLifecycleReceiver
+    ) -> any ScreenLifecycleObservation {
+        if let existing = observation(for: receiver) {
+            return existing
+        }
+        let observation = DirectScreenLifecycleObservation(route: route, receiver: receiver)
+        observation.adoptCurrentState(of: host)
+        observations.append(observation)
+        return observation
+    }
+
+    func viewWillAppear(_ host: UIViewController, animated: Bool) {
+        report(.willAppear, from: host, animated: animated)
+    }
+
+    func viewDidAppear(_ host: UIViewController, animated: Bool) {
+        owningNavigationController = host.navigationController
+        owningNavigationEntry = host.navigationStackEntry
+        owningHostContainer = host.parent
+        report(.didAppear, from: host, animated: animated)
+    }
+
+    func viewWillDisappear(_ host: UIViewController, animated: Bool) {
+        report(.willDisappear, from: host, animated: animated)
+    }
+
+    func viewDidDisappear(_ host: UIViewController, animated: Bool) {
+        report(.didDisappear(reason(for: host)), from: host, animated: animated)
+    }
+
+    private func report(
+        _ event: ScreenLifecycleEvent,
+        from host: UIViewController,
+        animated: Bool
+    ) {
+        removeDeadObservations()
+        observations.forEach { $0.report(event, host: host, animated: animated) }
+    }
+
+    private func removeDeadObservations() {
+        observations.removeAll { $0.receiver == nil }
+    }
+
+    /// Same measured rules as `ScreenProbe`, now applied to the reporting controller.
+    private func reason(for host: UIViewController) -> ScreenDisappearReason {
+        if host.isBeingDismissed { return .dismissed }
+        if host.isMovingFromParent { return .popped }
+
+        if let container = owningHostContainer, host.parent !== container {
+            return .popped
+        }
+        if let navigation = owningNavigationController, let entry = owningNavigationEntry {
+            return navigation.viewControllers.contains { $0 === entry } ? .covered : .popped
+        }
+        if host.presentingViewController == nil, host.viewIfLoaded?.window == nil {
+            return .dismissed
+        }
+        return host.viewIfLoaded?.window == nil ? .detached : .covered
+    }
+}
+
+@MainActor
+private final class DirectScreenLifecycleObservation: ScreenLifecycleObservation {
+    let route: RouteKey
+    private(set) weak var receiver: (any ScreenLifecycleReceiver)?
+    private(set) var isHostVisible = false
+    private var didReportDisappearance = false
+
+    init(route: RouteKey, receiver: ScreenLifecycleReceiver) {
+        self.route = route
+        self.receiver = receiver
+    }
+
+    func adoptCurrentState(of host: UIViewController) {
+        isHostVisible = host.viewIfLoaded?.window != nil
+    }
+
+    func claimDisappearanceReport() -> Bool {
+        guard !didReportDisappearance else { return false }
+        didReportDisappearance = true
+        return true
+    }
+
+    func report(_ event: ScreenLifecycleEvent, host: UIViewController, animated: Bool) {
+        switch event {
+        case .didAppear:
+            isHostVisible = true
+        case .didDisappear:
+            isHostVisible = false
+        case .willAppear, .willDisappear:
+            break
+        }
+        receiver?.screenLifecycleDidObserve(
+            event,
+            observation: self,
+            route: route,
+            host: host,
+            animated: animated
+        )
+    }
+}
+
+// MARK: - Probe
 
 /// An invisible child view controller that reports its host's appearance callbacks.
 ///
@@ -102,14 +287,7 @@ protocol ScreenLifecycleReceiver: AnyObject {
 /// `shouldAutomaticallyForwardAppearanceMethods = false`. That is rare, and it is
 /// detectable — see `hasReportedAppearance`.
 @MainActor
-final class ScreenProbe: UIViewController {
-
-    enum Event {
-        case willAppear
-        case didAppear
-        case willDisappear
-        case didDisappear(ScreenDisappearReason)
-    }
+final class ScreenProbe: UIViewController, ScreenLifecycleObservation {
 
     private let route: RouteKey
     private(set) weak var receiver: ScreenLifecycleReceiver?
@@ -220,6 +398,27 @@ final class ScreenProbe: UIViewController {
     }
 
     /// Attaches a probe to `host` for `receiver`, unless one is already there.
+    ///
+    /// ### The subview is load-bearing, and it costs something
+    ///
+    /// `addSubview` looks like ceremony next to `addChild` — appearance forwarding is
+    /// described in terms of child view *controllers* — but it is not. Measured both ways:
+    /// with containment alone, and with the probe's own view loaded but not inserted, UIKit
+    /// sends the probe nothing at all. Lifecycle stops, and with it the queue's wake-up,
+    /// which is `viewDidAppear` on the screen that just arrived. Do not remove it.
+    ///
+    /// The cost is that `host.view` is lazy, so this loads it. For a view controller the app
+    /// supplied, that runs its `viewDidLoad` a step earlier than UIKit would have — before
+    /// the screen has been pushed — so a `navigationController?.…` line there sees nil and
+    /// silently does nothing. `testAppSuppliedScreenSeesItsNavigationControllerInViewDidLoad`
+    /// records that as a known failure rather than leaving it to be discovered.
+    ///
+    /// Attaching after the presentation instead would trade it for a worse loss: an
+    /// unanimated push sends `viewDidAppear` synchronously, so the arrival that releases the
+    /// queue would be missed outright. The real answer is to stop inferring appearance from
+    /// an injected child and take it from the navigation controller and presentation
+    /// controller delegates, which is a change to how observation works rather than to when
+    /// this line runs.
     @discardableResult
     static func attach(to host: UIViewController, route: RouteKey, receiver: ScreenLifecycleReceiver) -> ScreenProbe? {
         if let existing = attached(to: host, receiver: receiver) { return existing }
@@ -317,8 +516,14 @@ final class ScreenProbe: UIViewController {
         return host.viewIfLoaded?.window == nil ? .detached : .covered
     }
 
-    private func report(_ event: Event, animated: Bool) {
+    private func report(_ event: ScreenLifecycleEvent, animated: Bool) {
         guard let host = parent else { return }
-        receiver?.screenProbeDidObserve(event, probe: self, route: route, host: host, animated: animated)
+        receiver?.screenLifecycleDidObserve(
+            event,
+            observation: self,
+            route: route,
+            host: host,
+            animated: animated
+        )
     }
 }

@@ -2,14 +2,22 @@ import Foundation
 import SwiftUI
 
 struct NavigationRootItem {
-    let keyPath: Int
+
+    /// Which `@Root` this is.
+    ///
+    /// A `RouteKey`, not a `KeyPath.hashValue`. `hasRoot(_:)` answers by comparing this
+    /// against the route it was asked about, and comparing hashes there is the same
+    /// mistake the routed screens were already fixed for: a collision does not fail
+    /// loudly, it answers `hasRoot(\.authenticated)` with the unauthenticated root's
+    /// child and hands the caller a coordinator of the wrong type to cast.
+    let route: RouteKey
     let input: Any?
     // Strong reference: root coordinator has no retain cycle
     // (parent reference is weak, so Coordinator → Stack → Root → child is safe)
     let child: ViewPresentable
 
-    init(keyPath: Int, input: Any?, child: ViewPresentable) {
-        self.keyPath = keyPath
+    init(route: RouteKey, input: Any?, child: ViewPresentable) {
+        self.route = route
         self.input = input
         self.child = child
     }

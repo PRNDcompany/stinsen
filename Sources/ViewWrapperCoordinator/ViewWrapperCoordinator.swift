@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// The NavigationViewCoordinator is used to represent a coordinator with a NavigationView
 @MainActor
@@ -21,6 +22,27 @@ open class ViewWrapperCoordinator<T: Coordinatable, V: View>: Coordinatable {
         AnyView(
             ViewWrapperCoordinatorView(coordinator: self, viewFactory(self))
         )
+    }
+
+    /// Hosts the wrapped view, then lets the child configure the controller.
+    ///
+    /// A wrapper builds no view controller of its own: there is one controller for wrapper
+    /// *and* child, because the child is rendered as SwiftUI inside the wrapper's view. So
+    /// the child is who gets to configure it — the wrapper's own customization point is the
+    /// view factory it was constructed with, not a UIKit hook.
+    ///
+    /// Without this forward, wrapping a coordinator in `NavigationViewCoordinator` and then
+    /// using it as a tab or routing to it silently discarded whatever the child set on its
+    /// own controller — the same shape of hole as a teardown cascade that stops at the
+    /// wrapper, and fixed the same way.
+    public func viewController() -> UIViewController {
+        hostedViewController()
+    }
+
+    /// `open` rather than `public`: a protocol extension's default is statically dispatched,
+    /// so a subclass could not participate at all unless the hook is a class member.
+    open func configure(_ viewController: UIViewController) {
+        child.configure(viewController)
     }
     
     public init(_ childCoordinator: T, _ view: @escaping (AnyView) -> V) {

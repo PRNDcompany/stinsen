@@ -25,6 +25,10 @@ fileprivate nonisolated class _AnyCoordinatorBase: Coordinatable {
         fatalError("must override")
     }
 
+    @MainActor func configure(_ viewController: UIViewController) {
+        fatalError("must override")
+    }
+
     nonisolated var id: String {
         fatalError("must override")
     }
@@ -71,6 +75,10 @@ fileprivate nonisolated final class _AnyCoordinatorBox<Base: Coordinatable>: _An
         base.dismissChild(coordinator: coordinator, action: action)
     }
 
+    @MainActor override func configure(_ viewController: UIViewController) {
+        base.configure(viewController)
+    }
+
     nonisolated override var id: String {
         _id
     }
@@ -92,6 +100,14 @@ public nonisolated final class AnyCoordinator: Coordinatable {
 
     @MainActor public func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         box.dismissChild(coordinator: coordinator, action: action)
+    }
+
+    /// Forwarded for the same reason `viewController()` is: the erased coordinator's own
+    /// hook, not the box's no-op default. Nothing inside the library needs this — a boxed
+    /// coordinator's `viewController()` calls its own `configure` — but a caller who reaches
+    /// for it through the box should not be met with silence.
+    @MainActor public func configure(_ viewController: UIViewController) {
+        box.configure(viewController)
     }
 
     @MainActor public func view() -> AnyView {

@@ -39,6 +39,22 @@ public protocol TabCoordinatable: Coordinatable {
 }
 
 @MainActor
+extension TabCoordinatable {
+
+    /// The tabs that are themselves coordinators, unwrapped from any erasure box.
+    ///
+    /// A teardown cascade needs these: closing the screen that holds a tab coordinator
+    /// removes its tabs' screens too, and each tab that is a coordinator keeps its own
+    /// records and its own `onDismiss` closures.
+    ///
+    /// Read from `allItems` rather than from `startingItems`, so a coordinator built with
+    /// the imperative `addTab` is included — those have no key paths at all.
+    var tabbedCoordinators: [any Coordinatable] {
+        (child.allItems ?? []).compactMap { $0.presentable as? any Coordinatable }
+    }
+}
+
+@MainActor
 public extension TabCoordinatable {
     func dismissChild<T: Coordinatable>(coordinator: T, action: (() -> Void)?) {
         fatalError("Not implemented")
@@ -103,15 +119,33 @@ public extension TabCoordinatable {
     /// The same `TabChild` drives both this and the SwiftUI `TabView` from `view()`, so
     /// `focusFirst`, `selectTab` and the re-tap callback behave identically either way.
     ///
-    /// - Note: `customize(_:)` does **not** apply here. It is typed as a SwiftUI view
-    ///   modifier, and there is no SwiftUI view to modify — a `UITabBarController` is
-    ///   configured through its own properties. Anything a coordinator does in
-    ///   `customize` for a UIKit host belongs on the view controllers themselves.
+    /// - Note: `customize(_:)` does not apply here — it is a SwiftUI view modifier and there
+    ///   is no SwiftUI view to modify. `configure(_:)` is the hook for this path, and it
+    ///   receives the `UITabBarController` itself.
+    ///
+    ///   The two are counterparts, not equivalents. Anything `customize` does to the SwiftUI
+    ///   *environment* has no expression here, because each tab is hosted individually — an
+    ///   `.environmentObject` injected around a `TabView` reaches its tabs, while one
+    ///   injected around a `UITabBarController` would reach nothing. Inject those in the tabs
+    ///   themselves.
     func viewController() -> UIViewController {
         if child.allItems == nil {
             setupAllTabs()
         }
-        return CoordinatorTabBarController(coordinator: self, child: child)
+        let tabBarController = CoordinatorTabBarController(coordinator: self, child: child)
+        configure(tabBarController)
+        #if DEBUG
+        if tabBarController.delegate !== tabBarController {
+            print("""
+                Stinsen: \(type(of: self)) replaced its UITabBarController's delegate in \
+                configure(_:). Selection is kept in step through that delegate, so tapping \
+                the tab you are already on is no longer observable and selectTab/focusFirst \
+                no longer follow the user's taps. Forward to the previous delegate instead \
+                of replacing it.
+                """)
+        }
+        #endif
+        return tabBarController
     }
 
     @discardableResult func focusFirst<Output: Coordinatable>(
