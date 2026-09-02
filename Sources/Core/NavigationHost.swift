@@ -61,6 +61,12 @@ final class NavigationHost {
     /// The screen whose arrival ends the current transition.
     private weak var transitionScreen: UIViewController?
 
+    /// What to run when the current transition finishes.
+    ///
+    /// Held here rather than threaded through the teardown because the teardown is not
+    /// what knows when it is over — the screen going away is.
+    private var transitionCompletion: (() -> Void)?
+
     /// How long to wait for a transition to report completion before assuming it never
     /// will. A jammed queue is worse than a rough transition: nothing would ever be
     /// presented again, silently.
@@ -241,6 +247,10 @@ final class NavigationHost {
                !observation.isHostVisible,
                observation.claimDisappearanceReport() {
                 lifecycleAware?.screenDidDisappear(record.route, viewController: viewController, reason: .detached)
+                // A screen that was already off-screen gets no `viewDidDisappear` when it
+                // is finally removed, so the queue would otherwise sit here until the
+                // watchdog. Nothing animated, so the transition is over.
+                endTransitionOnDeparture(of: viewController)
             }
             record.onDismiss?()
             record.child?.parent = nil
@@ -412,10 +422,11 @@ final class NavigationHost {
 
     // MARK: - Serialising transitions
 
-    private func beginTransition(endingWhen screen: UIViewController?) {
+    private func beginTransition(endingWhen screen: UIViewController?, completion: (() -> Void)? = nil) {
         let token = UUID()
         transitionToken = token
         transitionScreen = screen
+        transitionCompletion = completion
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.transitionTimeout) { [weak self] in
             guard let self, self.transitionToken == token else { return }
             #if DEBUG
@@ -434,6 +445,15 @@ final class NavigationHost {
         guard transitionToken == token else { return }
         transitionToken = nil
         transitionScreen = nil
+
+        // Before `presentPendingRecords`, not after: a completion that routes — "close
+        // this, then open that" — records its screen here, and the pending pass that
+        // follows is what puts it up. Running it afterwards would leave that screen
+        // waiting for an unrelated event to come along and flush the queue.
+        let completion = transitionCompletion
+        transitionCompletion = nil
+        completion?()
+
         presentPendingRecords()
     }
 
@@ -576,12 +596,27 @@ final class NavigationHost {
         // Closing animates too, so it holds the queue like any other transition. That is
         // what makes "pop, then open that" work: the second call records its screen
         // immediately and it goes up when the pop is done.
-        beginTransition(endingWhen: nil)
-        let token = transitionToken
-        performTeardown(of: removed, downTo: target, animated: animated) { [weak self] in
+        //
+        // The bottom-most screen is what the queue waits for. It is the one whose
+        // dismissal drives the animation the user sees — the ones above it are inside it
+        // and go with it — so its disappearance is when this is over.
+        //
+        // Only if it is on screen to begin with. A screen that is not in a window sends no
+        // `viewDidDisappear` when it goes, so waiting for one holds the queue until the
+        // watchdog and delivers the completion three seconds late — which is not "after it
+        // closed", it is just late. Nothing is animating in that case, so there is nothing
+        // to wait for.
+        let departing = removed.first?.viewController
+        guard departing?.viewIfLoaded?.window != nil else {
+            performTeardown(of: removed, downTo: target, animated: animated)
+            release(removed)
             completion?()
-            if let token { self?.endTransition(token) }
+            presentPendingRecords()
+            return
         }
+
+        beginTransition(endingWhen: departing, completion: completion)
+        performTeardown(of: removed, downTo: target, animated: animated)
 
         release(removed)
     }
@@ -600,16 +635,11 @@ final class NavigationHost {
     private func performTeardown(
         of removed: [RouteRecord],
         downTo target: UIViewController?,
-        animated: Bool,
-        completion: (() -> Void)?
+        animated: Bool
     ) {
-        guard base != nil else {
-            completion?()
-            return
-        }
+        guard base != nil else { return }
 
         var index = removed.count - 1
-        var pendingCompletion = completion
         while index >= 0 {
             if !removed[index].isBuiltIn {
                 if let viewController = removed[index].viewController {
@@ -624,20 +654,13 @@ final class NavigationHost {
                 runStart -= 1
             }
             let anchor = runStart >= 0 ? removed[runStart].viewController : target
-            // Only the bottom-most run gets the caller's completion: it is the one that
-            // finishes last in wall-clock terms, being the outermost transition.
-            let isLastRun = runStart < 0
             collapseBuiltInRun(
                 Array(removed[(runStart + 1)...index]),
                 downTo: anchor,
-                animated: animated,
-                completion: isLastRun ? pendingCompletion : nil
+                animated: animated
             )
-            if isLastRun { pendingCompletion = nil }
             index = runStart
         }
-
-        pendingCompletion?()
     }
 
     /// One presentation dismiss plus one navigation pop, in that order, for a run of
@@ -645,13 +668,9 @@ final class NavigationHost {
     private func collapseBuiltInRun(
         _ run: [RouteRecord],
         downTo target: UIViewController?,
-        animated: Bool,
-        completion: (() -> Void)?
+        animated: Bool
     ) {
-        guard let anchor = target ?? base else {
-            completion?()
-            return
-        }
+        guard let anchor = target ?? base else { return }
         let anchorContainer = outermostContainer(of: anchor)
 
         // The lowest screen in range that lives outside the anchor's presentation world
@@ -664,22 +683,15 @@ final class NavigationHost {
         let pop = navigationPop(downTo: anchor)
 
         guard let boundary, let presenter = boundary.presentingViewController else {
-            guard let pop else {
-                completion?()
-                return
-            }
-            pop(animated)
-            runAfter(transitionOf: anchor.navigationController, completion: completion)
+            pop?(animated)
             return
         }
 
         presenter.dismiss(animated: animated)
         if let coordinator = presenter.transitionCoordinator {
-            coordinator.animate(alongsideTransition: { _ in pop?(false) },
-                                completion: { _ in completion?() })
+            coordinator.animate(alongsideTransition: { _ in pop?(false) })
         } else {
             pop?(false)
-            completion?()
         }
     }
 
@@ -692,15 +704,6 @@ final class NavigationHost {
               index < navigation.viewControllers.count - 1 else { return nil }
         return { animated in
             navigation.popToViewController(entry, animated: animated)
-        }
-    }
-
-    private func runAfter(transitionOf navigation: UINavigationController?, completion: (() -> Void)?) {
-        guard let completion else { return }
-        if let coordinator = navigation?.transitionCoordinator {
-            coordinator.animate(alongsideTransition: nil, completion: { _ in completion() })
-        } else {
-            completion()
         }
     }
 
@@ -777,6 +780,22 @@ extension NavigationHost: ScreenLifecycleReceiver {
         endTransition(token)
     }
 
+    /// Releases the queue now that the screen it was waiting to see go has gone.
+    ///
+    /// The mirror of `endTransitionOnArrival`, and for the same reason. Closing was the
+    /// one side of this that had no signal: `beginTransition(endingWhen: nil)` gave the
+    /// queue nothing to wait for, so it fell back on the teardown reporting itself.
+    /// The teardown cannot report itself — `performTeardown` hands the dismissal to a
+    /// closure the app wrote and has no way to know what it did, let alone when it
+    /// finished. It duly returned as soon as it had *asked* for the screen to go, which
+    /// for an animated dismissal is the beginning of the transition rather than its end.
+    ///
+    /// So the disappearance is the signal, exactly as the arrival is on the other side.
+    private func endTransitionOnDeparture(of viewController: UIViewController) {
+        guard viewController === transitionScreen, let token = transitionToken else { return }
+        endTransition(token)
+    }
+
     private func noteDisappearance(
         observation: any ScreenLifecycleObservation,
         of viewController: UIViewController,
@@ -793,6 +812,7 @@ extension NavigationHost: ScreenLifecycleReceiver {
         if observation.claimDisappearanceReport() {
             lifecycleAware?.screenDidDisappear(route, viewController: viewController, reason: reason)
         }
+        endTransitionOnDeparture(of: viewController)
         reconcile()
     }
 }
