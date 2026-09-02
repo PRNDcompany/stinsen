@@ -21,21 +21,31 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
     var presentHandler: PresentHandler
     var dismissHandler: DismissHandler
 
+    public let kind: PresentationKind
+
     public init(make makeUIViewController: @escaping MakeUIViewControllerHandler,
                 present presentHandler: @escaping PresentHandler,
-                dismiss dismissHandler: @escaping DismissHandler) {
+                dismiss dismissHandler: @escaping DismissHandler,
+                kind: PresentationKind = .custom) {
         self.makeUIViewController = makeUIViewController
         self.presentHandler = presentHandler
         self.dismissHandler = dismissHandler
+        self.kind = kind
     }
 
     public init(make makeUIViewController: @escaping MakeUIViewControllerHandler,
-                present presentHandler: @escaping PresentHandler) {
+                present presentHandler: @escaping PresentHandler,
+                kind: PresentationKind = .custom) {
         self.makeUIViewController = makeUIViewController
         self.presentHandler = presentHandler
+        self.kind = kind
         self.dismissHandler = { viewController in
+            // `> 1`, not `> 2`: a root plus this one screen already means there is
+            // something to go back to. With the old threshold the first pushed screen
+            // fell through to `dismiss(animated:)`, which does nothing at all to a
+            // *pushed* view controller — so "go back" silently did nothing at depth one.
             if let navigationController = viewController.navigationController,
-               navigationController.viewControllers.count > 2 {
+               navigationController.viewControllers.count > 1 {
                 viewController.navigationController?.popViewController(animated: true)
             } else {
                 // NOTE: Dismiss from presenting VC to close any presented VCs at once
@@ -49,19 +59,15 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
     }
 
     public func makePresented<T: NavigationCoordinatable>(content: StackItemContent, nextId: Int, coordinator: T) -> ViewControllerPresented? {
-        switch content {
-        case .view:
-            let view = AnyView(NavigationCoordinatableView(id: nextId, coordinator: coordinator))
-            return ViewControllerPresented(
-                viewController: makeViewController(content: view),
-                presentationType: self
-            )
-        case .coordinator(let c):
-            return ViewControllerPresented(
-                viewController: makeViewController(content: c.view()),
-                presentationType: self
-            )
-        }
+        // The content is turned into a view controller as it is. It used to be wrapped in
+        // another `NavigationCoordinatableView` carrying `nextId`, whose only job was to
+        // introspect its way to a view controller so *the next* level could be presented
+        // from it. `NavigationHost` owns every level now, so there is nothing left for
+        // the wrapper to do — and `nextId` names a position that no longer exists.
+        ViewControllerPresented(
+            viewController: content.makeViewController(using: AnyPresentationType(self)),
+            presentationType: self
+        )
     }
 
     public func makeViewController<Content>(content: Content) -> UIViewController where Content : View {
@@ -74,64 +80,43 @@ public struct UIKitPresentation<ViewController: UIViewController>: PresentationT
         return viewController
     }
 
+    /// - Parameter onDismissed: no longer called. Disappearance is observed rather than
+    ///   inferred — see the note below. Kept in the signature because it is a public
+    ///   protocol requirement and removing it would break every conformer.
     public func presented(parent: UIViewController, content: UIViewController, onAppeared: @escaping () -> Void, onDismissed: @escaping () -> Void) {
-        
-        // Handle re-entry: clear existing lifecycleObject if present
-        if content.lifecycleObject != nil {
-            content.lifecycleObject = nil
-        }
-
-        let lifecycleObject = LifecycleObject()
-        
-        // Only call onDismissed when the view controller is actually being deallocated
-        lifecycleObject.onDeinit = {
-            onDismissed()
-        }
-
-        content.lifecycleObject = lifecycleObject
+        // `onDismissed` used to be driven by an associated object whose `deinit` fired
+        // it. That was the only way to notice a screen going away before the coordinator
+        // could ask UIKit — but it depended on ARC: it arrived whenever the view
+        // controller was finally released, in no particular order, and never at all if
+        // anything still retained it. `ScreenProbe` reports the disappearance with a
+        // reason, and `reconcile()` re-derives from UIKit on every operation, so nothing
+        // is left for it to do.
+        //
+        // It also planted a hidden object on a view controller the app may own, which
+        // stops being defensible the moment app-supplied view controllers can be screens.
         guard let typedContent = content as? ViewController else {
-            assertionFailure("UIKitPresentation: expected \(ViewController.self), got \(type(of: content))")
+            assertionFailure("""
+                Stinsen: this presentation can only present \(ViewController.self), but \
+                it was given \(type(of: content)). A presentation built with \
+                `AnyPresentationType(make:present:)` is typed to whatever `make` returns, \
+                so it cannot be used to present a view controller of another type.
+                """)
             return
         }
         presentHandler(
             parent,
             typedContent
         )
-        
-        // Call onAppeared after presentation completes
-        // Note: The appear() function has been fixed to not trigger unwanted popTo() calls
+
+        // A run loop hop, not a transition completion — the accurate signal is the
+        // screen's own `viewDidAppear`, which `NavigationHost` observes through its probe.
         DispatchQueue.main.async {
             onAppeared()
         }
     }
 
     public func dismissed(viewController: UIViewController) {
-        // Clear lifecycleObject to ensure clean state for re-entry
-        viewController.lifecycleObject = nil
-        
-        // NOTE: We need to ensure the stack is properly cleaned up when dismissing
-        // The dismissHandler should handle the UI dismissal, but the stack cleanup
-        // should be handled by the coordinator through the onDismissed callback
         dismissHandler(viewController)
     }
 
-}
-
-// MARK: - private
-private enum MapTables {
-    static let lifecycle = WeakMapTable<UIViewController, Any>()
-}
-
-private nonisolated final class LifecycleObject {
-    var onDeinit: (() -> Void)?
-    deinit {
-        onDeinit?()
-    }
-}
-
-private extension UIViewController {
-    var lifecycleObject: LifecycleObject? {
-        get { MapTables.lifecycle.value(forKey: self) as? LifecycleObject }
-        set { MapTables.lifecycle.setValue(newValue, forKey: self) }
-    }
 }

@@ -8,10 +8,16 @@ extension UnauthenticatedCoordinator {
     }
     
     @ViewBuilder func makeForgotPassword() -> some View {
-        ForgotPasswordScreen(services: unauthenticatedServices)
+        ForgotPasswordScreen(services: unauthenticatedServices) { [weak self] in
+            self?.popToRoot()
+        }
     }
     
     @ViewBuilder func makeStart() -> some View {
-        LoginScreen(services: unauthenticatedServices)
+        LoginScreen(
+            services: unauthenticatedServices,
+            onRegister: { [weak self] in self?.route(to: \.registration) },
+            onForgotPassword: { [weak self] in self?.route(to: \.forgotPassword) }
+        )
     }
 }

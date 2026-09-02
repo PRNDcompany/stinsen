@@ -2,59 +2,103 @@
   <img src="./Images/wordmark.svg" alt="Stinsen">
 </p>
 
-[![Language](https://img.shields.io/static/v1.svg?label=language&message=Swift%205&color=FA7343&logo=swift&style=flat-square)](https://swift.org)
-[![Platform](https://img.shields.io/static/v1.svg?label=platforms&message=iOS%20|%20tvOS%20|%20watchOS%20|%20macOS&logo=apple&style=flat-square)](https://apple.com)
+[![Language](https://img.shields.io/static/v1.svg?label=language&message=Swift%205.9&color=FA7343&logo=swift&style=flat-square)](https://swift.org)
+[![Platform](https://img.shields.io/static/v1.svg?label=platform&message=iOS%2015%2B&logo=apple&style=flat-square)](https://apple.com)
 [![License](https://img.shields.io/cocoapods/l/Crossroad.svg?style=flat-square)](https://github.com/rundfunk47/stinsen/blob/main/LICENSE)
 
-Simple, powerful and elegant implementation of the Coordinator pattern in SwiftUI. Stinsen is written using 100% SwiftUI which makes it work seamlessly across iOS, tvOS, watchOS and macOS devices.
+An implementation of the Coordinator pattern where **UIKit owns navigation and SwiftUI is
+a first-class citizen on top of it**. Screens can be `UIViewController`s or SwiftUI
+views, in the same stack, and the app can be hosted from either runtime.
+
+> **This is a fork.** Upstream [rundfunk47/stinsen](https://github.com/rundfunk47/stinsen)
+> is 100% SwiftUI and cross-platform. This fork moved the transition engine to UIKit and
+> is iOS-only. See [Differences from upstream](#differences-from-upstream-) before
+> migrating.
 
 # Why? 🤔
 
-We all know routing in UIKit can be hard to do elegantly when working with applications of a larger size or when attempting to apply an architectural pattern such as MVVM. Unfortunately, SwiftUI out of the box suffers from many of the same problems as UIKit does: concepts such as `NavigationLink` live in the view-layer, we still have no clear concept of flows and routes, and so on. _Stinsen_ was created to alleviate these pains, and is an implementation of the _Coordinator Pattern_. Being written in SwiftUI, it is completely cross-platform and uses the native tools such as `@EnvironmentObject`. The goal is to make _Stinsen_ feel like a missing tool in SwiftUI, conforming to its coding style and general principles.
+Routing is hard to do elegantly in a large app: `NavigationLink` lives in the view layer,
+there is no clear concept of a flow or a route, and views end up knowing about every other
+view they can reach. The Coordinator pattern — presented to the iOS community by Soroush
+Khanlou at NSSpain in 2015 — moves that responsibility up, out of the view.
 
-# What is a Coordinator? 🤷🏽‍♂️ 
+The specific bet this fork makes is about *who owns the navigation stack*. UIKit already
+knows the order of the screens on screen, owns their lifetimes, and provides
+`popToViewController(_:)`. A coordinator that keeps its own parallel array of screens has
+a second opinion about all three, and the two disagree whenever anything happens that the
+coordinator did not initiate — a back swipe, a sheet dragged down, a system flow, or any
+code outside the coordinator closing a view controller.
 
-Normally in SwiftUI, the view has to handle adding other views to the navigation stack using `NavigationLink`. What we have here is a tight coupling between the views, since the view must know in advance all the other views that it can navigate between. Also, the view is in violation of the _single-responsibility principle_ (SRP). Using the Coordinator Pattern, presented to the iOS community by Soroush Khanlou at the NSSpain conference in 2015, we can delegate this responsibility to a higher class: The Coordinator.
+So the stack is not kept. It is read back from UIKit on every operation. What the
+coordinator retains is the one thing UIKit cannot know: **which route produced a screen**.
 
-# How do I use Stinsen? 👩🏼‍🏫 
+# What is a Coordinator? 🤷🏽‍♂️
 
-## Defining the coordinator
-Example using a Navigation Stack:
+Normally the view has to add other views to the navigation stack itself. That couples the
+views together — a view must know in advance everything it can navigate to — and puts it
+in violation of the single-responsibility principle. A coordinator takes that job.
+
+# Getting started 👩🏼‍🏫
+
+## Defining a coordinator
 
 ```swift
 final class UnauthenticatedCoordinator: NavigationCoordinatable {
-    let stack = NavigationStack(initial: \UnauthenticatedCoordinator.start)
-    
+    let stack = CoordinatorStack(initial: \UnauthenticatedCoordinator.start)
+
     @Root var start = makeStart
     @Route(.modal) var forgotPassword = makeForgotPassword
     @Route(.push) var registration = makeRegistration
-    
+
     func makeRegistration() -> RegistrationCoordinator {
-        return RegistrationCoordinator()
+        RegistrationCoordinator()
     }
-    
+
     @ViewBuilder func makeForgotPassword() -> some View {
         ForgotPasswordScreen()
     }
-    
+
     @ViewBuilder func makeStart() -> some View {
         LoginScreen()
     }
 }
-
 ```
 
-The `@Route`s defines all the possible routes that can be performed from the current coordinator and the transition that will be performed. The value on the right hand side is the factory function that will be executed when routing. The function can return either a SwiftUI view or another coordinator. The `@Root` another type of route that has no transition, and used for defining the first view of the coordinator's navigation stack, which is referenced by the `NavigationStack`-class.  
+`@Route` declares a route and the transition it performs; the value on the right is the
+factory run when routing, returning either a view or another coordinator. `@Root` is a
+route with no transition — the coordinator's first screen.
 
-_Stinsen_ out of the box has two different kinds of `Coordinatable` protocols your coordinators can implement: 
+Two `Coordinatable` protocols cover the standard cases:
 
-* `NavigationCoordinatable` - For navigational flows. Make sure to wrap these in a NavigationViewCoordinator if you wish to push on the navigation stack.
-* `TabCoordinatable` - For TabViews.
+* `NavigationCoordinatable` — navigational flows.
+* `TabCoordinatable` — tabs.
 
-In addition, _Stinsen_ also has two Coordinators you can use, `ViewWrapperCoordinator` and `NavigationViewCoordinator`. `ViewWrapperCoordinator` is a coordinator you can either subclass or use right away to wrap your coordinator in a view, and `NavigationViewCoordinator` is a `ViewWrapperCoordinator` subclass that wraps your coordinator in a `NavigationView`.   
+Plus two coordinators you can use directly: `ViewWrapperCoordinator` wraps a coordinator's
+view in another view, and `NavigationViewCoordinator` is a subclass of it that wraps in a
+`NavigationView`.
 
-## Showing the coordinator for the user
-The view for the coordinator can be created using `.view()`, so in order to show a coordinator to the user you would just do something like:
+## Showing the coordinator
+
+From UIKit:
+
+```swift
+// SceneDelegate
+window.rootViewController = MainCoordinator().viewController()
+
+// or, when the coordinator's routes include .push and nothing else provides navigation:
+window.rootViewController = MainCoordinator().navigationController()
+```
+
+`viewController()` returns a UIKit container that is also the coordinator's navigation
+anchor. Its active root is installed as a direct child: a SwiftUI root crosses through one
+`UIHostingController`, while a `UIViewController` root stays the app's original controller.
+No SwiftUI render or layout pass is required to discover the UIKit anchor.
+
+SwiftUI-to-SwiftUI root changes stay inside that one hosting controller, retaining their
+SwiftUI transaction and `AnyTransition`. A switch that crosses into or out of a native
+view-controller root is a UIKit boundary and uses the container transition instead.
+
+From SwiftUI:
 
 ```swift
 struct StinsenApp: App {
@@ -66,225 +110,363 @@ struct StinsenApp: App {
 }
 ```
 
-_Stinsen_ can be used to power your whole app, or just parts of your app. You can still use the usual SwiftUI `NavigationLink`s and present modal sheets inside views managed by _Stinsen_, if you wish to do so.
+Both are supported and exercised by the same UI test suite, run twice. Stinsen can power
+your whole app or part of it; ordinary `NavigationLink`s and sheets still work inside
+views it manages.
 
-## Navigating from the coordinator
-Using a router, which has a reference to both the coordinator and the view, we can perform transitions from a view. Inside the view, the router can be fetched using `@EnvironmentObject`. Using the router one can transition to other routes:
+The SwiftUI entry remains a different rendering path on purpose. `view()` composes
+SwiftUI roots in the surrounding SwiftUI tree, so transactions, environment and size
+animations are not routed through an extra hosting controller. A coordinator-local
+background controller supplies its UIKit navigation anchor; this also works when the
+surrounding `UIHostingController` was built by the app rather than by Stinsen.
+
+## Navigating
+
+Routing happens on the coordinator. Give the view what it needs to *ask* — a closure, or
+the coordinator itself — rather than making the view do the navigating:
 
 ```swift
 struct TodosScreen: View {
-    @EnvironmentObject var todosRouter: TodosCoordinator.Router
-    
+    let createTodoTapped: () -> Void
+
     var body: some View {
-        List {
-          /* ... */
-        }
-        .navigationBarItems(
-            trailing: Button(
-                action: {
-                    // Transition to the screen to create a todo:
-                    todosRouter.route(to: \.createTodo) 
-                },
-                label: { 
-                    Image(systemName: "doc.badge.plus") 
-                }
+        List { /* ... */ }
+            .navigationBarItems(
+                trailing: Button(
+                    action: createTodoTapped,
+                    label: { Image(systemName: "doc.badge.plus") }
+                )
             )
-        )
     }
+}
+
+// in the coordinator's factory
+@ViewBuilder func makeTodos() -> some View {
+    TodosScreen(createTodoTapped: { [weak self] in self?.route(to: \.createTodo) })
 }
 ```
 
-You can also fetch routers referencing coordinators that appeared earlier in the tree. For instance, you may want to switch the tab from a view that is inside the `TabView`.
+> **Why not an `@EnvironmentObject` router?** Because it cannot reach: each screen is its
+> own `UIHostingController`, and the SwiftUI environment does not cross that boundary.
+> Upstream's `RouterStore` was a global registry working around exactly this, and it is
+> gone. A view that receives what it needs is also the coordinator pattern working as
+> intended.
 
-Routing can be performed directly on the coordinator itself, which can be useful if you want your coordinator to have some logic, or if you pass the coordinator around:
+Routing without declaring a route first — the recommended style for new code — builds the
+screen at the call site:
+
+```swift
+coordinator.route(.push, to: ProductView(id: 42))
+coordinator.route(.modal, to: FilterViewController())        // a UIViewController
+coordinator.route(.push, to: ReviewListView(), id: "reviews") // named, so you can return to it
+coordinator.route(.modal, to: CheckoutCoordinator())
+```
+
+Operations on a `NavigationCoordinatable`:
+
+| | |
+|---|---|
+| `route(to:)` / `route(_:to:)` | Open a screen. |
+| `popLast()` | Close the top screen. Push or modal — the same call for both. |
+| `popToRoot()` | Close everything. Crosses presentation boundaries. |
+| `popTo(id:)` | Return to a screen opened with `route(_:to:id:)`. The **nearest** match. |
+| `focusFirst(_:)` | Find the **first** screen matching a declared route and close everything above it. |
+| `root(_:)` | Change the root. Closes the screens the outgoing root had open. |
+| `hasRoot(_:)` | The active root's child, if that route is the one rooted. |
+| `dismissCoordinator()` | Ask the parent to close this whole coordinator. |
+
+Because routes are key paths these are type-safe: if there is a route from _A_ to _B_ and
+from _B_ to _C_, a chain from _A_ straight to _C_ will not compile.
+
+# UIKit and SwiftUI 🧩
+
+Any screen can be either. A stack can alternate freely.
+
+```swift
+coordinator.route(.push, to: ProductViewController(id: 42))   // UIKit
+coordinator.route(.push, to: ReviewsView())                   // SwiftUI
+coordinator.popToRoot()                                       // closes both
+```
+
+A view controller you supply is presented **as it is** — not wrapped, not subclassed, still
+the object you are holding a reference to — and gets the same lifecycle callbacks, the same
+place in `popLast()` / `popToRoot()` / `popTo(id:)`, and the same behaviour when something
+outside the coordinator closes it.
+
+One thing *is* added: an invisible child view controller, which is how appearance callbacks
+for a screen the library did not build are observed at all (UIKit forwards them to
+children). It has a zero-sized hidden view, takes no touches, and is the only alternative to
+swizzling your class. It shows up in `children`, so code that reassigns containment can
+remove it by accident — that is noticed and repaired, with a DEBUG log saying so. Navigation
+never depends on it; only lifecycle reporting does.
+
+**One known consequence.** Adding it loads your view controller's view, which means
+`viewDidLoad` runs a step earlier than plain UIKit would run it — before the screen has been
+pushed. Anything in `viewDidLoad` that reads the surroundings sees them empty:
+
+```swift
+override func viewDidLoad() {
+    super.viewDidLoad()
+    navigationController?.setNavigationBarHidden(true, animated: false)  // nil here
+}
+```
+
+Move that to `viewWillAppear`, which runs at the normal time and is where a navigation bar
+is usually configured anyway. `navigationItem` is unaffected — it belongs to your screen, not
+to the navigation controller — and so is everything that does not reach outside itself.
+
+That includes a `UIHostingController` you built yourself, which is how SwiftUI content
+gets an environment across a screen boundary:
+
+```swift
+let screen = UIHostingController(
+    rootView: ProductView(id: 42).environmentObject(theme)
+)
+coordinator.route(.push, to: screen)
+```
+
+Roots and tabs work the same way:
 
 ```swift
 final class MainCoordinator: NavigationCoordinatable {
-    @Root var unauthenticated = makeUnauthenticated
-    @Root var authenticated = makeAuthenticated
-    
-    /* ... */
-    
-    init() {
-        /* ... */
+    let stack = CoordinatorStack(initial: \MainCoordinator.login)
 
-        cancellable = AuthenticationService.shared.status.sink { [weak self] status in
-            switch status {
-            case .authenticated(let user):
-                self?.root(\.authentiated, user)
-            case .unauthenticated:
-                self?.root(\.unauthentiated)
-            }
+    @Root var login = makeLoginViewController      // -> UIViewController
+    @Root var home  = makeHomeScreen               // -> some View
+}
+
+final class AppTabCoordinator: TabCoordinatable {
+    let child = TabChild(startingItems: [\AppTabCoordinator.todos])
+
+    // Declared for both hosts. A SwiftUI view cannot be turned into a UITabBarItem, so
+    // a coordinator that wants to be hostable either way says both.
+    @Route(tabItem: makeTodosTab, tabBarItem: makeTodosBarItem)
+    var todos = makeTodos
+}
+
+appTabCoordinator.viewController()   // a real UITabBarController
+appTabCoordinator.view()             // a SwiftUI TabView
+```
+
+That choice follows the runtime doing the presenting, not just the entry point. Routing to a
+coordinator with `.push`, `.modal` or `.fullScreen` puts up *its* view controller — so a tab
+coordinator opened as a screen is a real `UITabBarController` there too, with tab bar items
+to configure and a delegate to hook, rather than a `TabView` hosted inside it.
+
+# Lifecycle 🔄
+
+Coordinators can opt in to hearing about their screens. Every requirement has a no-op
+default, so conforming costs nothing.
+
+```swift
+extension TodosCoordinator: CoordinatorLifecycleAware {
+    func screenDidAppear(_ route: RouteKey, viewController: UIViewController, animated: Bool) {
+        analytics.track(screen: route)
+    }
+
+    func screenDidDisappear(_ route: RouteKey, viewController: UIViewController,
+                            reason: ScreenDisappearReason) {
+        guard reason.isClosed else { return }   // .covered means it is still on the stack
+        cancelInFlightRequests(for: viewController)
+    }
+}
+```
+
+`viewController` is passed alongside `route` because the route alone cannot say *which*
+screen this is — drilling from one product detail into another gives both the same route.
+The view controller is the occurrence identity.
+
+`ScreenDisappearReason` is `.popped`, `.dismissed`, `.covered` or `.detached`. Use
+`isClosed` rather than enumerating: which of the three "closed" reasons you get depends on
+where the screen was. The top screen reports `.popped` or `.dismissed`; one that was
+already covered reports `.detached`, because UIKit sent its disappearance when it was
+covered and sends nothing more when it is finally removed.
+
+## What is guaranteed
+
+| | |
+|---|---|
+| `onDismiss` on `route(_:to:onDismiss:)` | **Exactly once**, whichever path closed the screen. The coordinator runs it when it drops the screen rather than waiting to be told. |
+| `CoordinatorLifecycleAware` | **Observations.** Reported when UIKit says so, and they inherit UIKit's silences. |
+| The stack matching what is on screen | Membership is derived from UIKit on every operation, so it is correct even after a close the coordinator did not initiate. |
+
+`onDismiss` says *the coordinator is no longer showing this screen*, which is not quite the
+same as *the animation has finished*. It runs synchronously when the screen is dropped:
+immediately for a close the coordinator performed, and on the next operation or lifecycle
+signal for one it did not — which is as soon as it can be, since nothing announces a screen
+that was already hidden when something else removed it. It also runs for a screen that was
+recorded but never got as far as being presented, because that screen is equally not being
+shown. For "the transition is over", use the completion on `popLast(_:)` / `popToRoot(_:)`.
+
+Lifecycle is silent for a screen inside a container that does not forward appearance
+callbacks — which every UIKit container does, `UITabBarController` and
+`UINavigationController` included. A DEBUG log says so when it happens. Navigation is
+unaffected: liveness comes from UIKit, not from the lifecycle callbacks — a screen that
+went up without announcing itself is still recognised as being up, and still closes.
+
+# Advanced usage 👩🏾‍🔬
+
+## Custom presentations
+
+`.push`, `.modal` and `.fullScreen` are built in. Anything else is three closures:
+
+```swift
+static let overlay = AnyPresentationType(
+    make: { content, dismiss in HeroViewController(rootView: content, onDismiss: dismiss) },
+    present: { parent, vc in parent.addChild(vc); /* ... */ },
+    dismiss: { vc in /* reverse the hero animation, then remove */ }
+)
+
+coordinator.route(Self.overlay, to: ProductView(id: 42))
+```
+
+Teardown always goes through your `dismiss` closure, so a reverse animation or your own
+cleanup is never skipped — including when your presentation declares a `kind:` of `.push`
+or `.modal`. That declaration is read for diagnostics only; whether a screen can be taken
+down through UIKit directly is decided by who built the presentation, not by what it calls
+itself. A custom presentation is typed to whatever `make` returns and can only present that
+type — routing another kind of view controller through it trips an assertion saying so.
+
+Your `present` closure may take its time. A screen is not assumed to be on screen until it
+actually is, so a presentation that attaches from a completion handler, after a layout pass,
+or into containment of its own is not mistaken for one that failed — and once it is up it is
+tracked like any other screen, whether or not anything announced its arrival.
+
+## Customizing
+
+`NavigationCoordinatable` and `TabCoordinatable` have a `customize` function applied to
+the coordinator's root view:
+
+```swift
+@ViewBuilder func customize(_ view: AnyView) -> some View {
+    view.onReceive(Services.shared.$authentication) { authentication in
+        switch authentication {
+        case .authenticated:   self.root(\.authenticated)
+        case .unauthenticated: self.root(\.unauthenticated)
         }
     }
 }
 ```
 
-What actions you can perform from the router/coordinator depends on the kind of coordinator used. For instance, using a `NavigationCoordinatable`, some of the functions you can perform are:
+It is a SwiftUI view modifier, so it customizes what SwiftUI renders. The UIKit half is
+`configure`, which hands you the view controller the library built to stand for the
+coordinator:
 
-* `popLast` - Removes the last item from the stack. Note that _Stinsen_ doesn't care if the view was presented modally or pushed, the same function is used for both. 
-* `pop` - Removes the view from the stack. This function can only be performed by a router, since only the router knows about which view you're trying to pop.
-* `popToRoot` - Clears the stack.
-* `root` - Changes the root (i.e. the first view of the stack). If the root is already the active root, will do nothing.
-* `route` - Navigates to another route.
-* `focusFirst` - Finds the specified route if it exists in the stack, starting from the first item. If found, will remove everything after that.
-* `dismissCoordinator` - Deletes the whole coordinator and it's associated children from the tree.
+```swift
+func configure(_ viewController: UIViewController) {
+    viewController.tabBarItem = UITabBarItem(title: "Todos", image: UIImage(systemName: "list.bullet"), tag: 0)
+    viewController.isModalInPresentation = true
+}
+```
+
+That is the only way to reach the things that are not view state — `title`, `tabBarItem`,
+`navigationItem`, `modalPresentationStyle` — and the only hook a `TabCoordinatable` hosted as
+a real `UITabBarController` has, since there is no SwiftUI view there to modify.
+
+| | |
+|---|---|
+| When | Once per view controller the library builds, before anything presents it. `viewController()` is a factory, so asking twice configures twice. |
+| Where it does **not** run | The SwiftUI path (`view()`) — `customize` is the hook there — and screens whose container is built by your own presentation, which is typed to its own container. |
+| Precedence | A route declaration outranks it: `.fullScreen` re-asserts its presentation style, and a tab declared with `tabBarItem:` overwrites one set here. `.modal` does not touch presentation style, so choosing `.formSheet` in `configure` works. |
+| If you implement `viewController()` yourself | Yours wins, and nothing calls `configure` for you. Call it yourself. |
+
+The two are counterparts, not equivalents. Anything `customize` does to the SwiftUI
+*environment* has no UIKit expression: an `.environmentObject` injected around a `TabView`
+reaches its tabs, while one injected around a `UITabBarController` would reach nothing,
+because each tab is hosted separately. Inject those in the tabs themselves.
+
+Keep navigation state subscriptions in the coordinator (or another model it owns), not in
+`customize`. A modifier such as `onReceive` exists only while that SwiftUI subtree is being
+rendered; a UIKit entry may be showing a native root or child coordinator with no parent
+SwiftUI subtree at all. Likewise, forward UIKit scene URLs to the coordinator from
+`scene(_:openURLContexts:)`; `onOpenURL` remains the SwiftUI entry hook.
+
+## Chaining
+
+Most operations return a coordinator, so they compose:
+
+```swift
+authenticatedCoordinator
+    .focusFirst(\.todos)     // make the todos tab active
+    .child                   // the NavigationViewCoordinator's child
+    .popToRoot()
+    .route(to: \.todo, todo.id)
+```
+
+## Deep linking
+
+```swift
+@ViewBuilder func customize(_ view: AnyView) -> some View {
+    view.onOpenURL { url in
+        // Coordinator routes are erased to AnyCoordinator so factories can return
+        // `some Coordinatable` — unwrap to get back to your own API.
+        guard let coordinator = self.hasRoot(\.authenticated)?
+            .unwrap(AuthenticatedCoordinator.self) else { return }
+
+        if case .todo(let id) = try? DeepLink(url: url, todosStore: coordinator.todosStore) {
+            coordinator.focusFirst(\.todos).child.route(to: \.todo, id)
+        }
+    }
+}
+```
+
+Routing before anything has rendered is fine — screens recorded with nowhere to go yet go
+up when there is somewhere.
 
 # Examples 📱
 
 <img src="./Images/stinsenapp-ios.gif" alt="Stinsen Sample App">
 
-Clone the repo and run the _StinsenApp_ in _Examples/App_ to get a feel for how _Stinsen_ can be used. _StinsenApp_ works on iOS, tvOS, watchOS and macOS. It attempts to showcase many of the features _Stinsen_ has available for you to use. Most of the code from this readme comes from the sample app. There is also an example showing how _Stinsen_ can be used to apply a testable MVVM-C architecture in SwiftUI, which is available in _Example/MVVM_.
+Clone the repo and run _StinsenApp_ in `Examples/App`. Its **Testbed** tab is where the
+behaviour is exercised: mixed UIKit/SwiftUI chains, back-to-back navigation, custom
+presentations, embedded coordinators, UIKit tabs, and every lifecycle reason. The UI tests
+in `Examples/App/UITests` drive it.
 
-# Advanced usage 👩🏾‍🔬
+Run the suite against both entry points:
 
-## ViewModel Support
+```bash
+# SwiftUI entry
+xcodebuild test -scheme 'StinsenApp (iOS)' -destination 'platform=iOS Simulator,name=iPhone 16'
 
-Since `@EnvironmentObject` only can be accessed within a `View`, _Stinsen_ provides a couple of ways of routing from the ViewModel. You can inject the coordinator through the ìnitializer, or register it at creation and resolve it in the viewmodel through a dependency injection framework. These are the recommended ways of doing this, since you will have maximum control and functionality. 
-
-Other ways are passing the router using the `onAppear` function:
-
-```swift
-struct TodosScreen: View {
-    @StateObject var viewModel = TodosViewModel() 
-    @EnvironmentObject var projects: TodosCoordinator.Router
-    
-    var body: some View {
-        List {
-          /* ... */
-        }
-        .onAppear {
-            viewModel.router = projects
-        }
-    }
-}
+# UIKit entry — same tests, booted from a SceneDelegate
+xcodebuild test -scheme 'StinsenApp (iOS)' -destination 'platform=iOS Simulator,name=iPhone 16' \
+    TEST_RUNNER_STINSEN_UIKIT_ENTRY=1
 ```
 
-You can also use what is called the `RouterStore` to retreive the router. The `RouterStore` saves the instance of the router and you can get it via a custom PropertyWrapper.
+# Differences from upstream 🔀
 
-To retrieve a router:
-```swift
-class LoginScreenViewModel: ObservableObject {
-    
-    // directly via the RouterStore
-    var main: MainCoordinator.Router? = RouterStore.shared.retrieve()
-    
-    // via the RouterObject property wrapper
-    @RouterObject
-    var unauthenticated: Unauthenticated.Router?
-    
-    init() {
-        
-    }
-    
-    func loginButtonPressed() {
-        main?.root(\.authenticated)
-    }
-    
-    func forgotPasswordButtonPressed() {
-        unauthenticated?.route(to: \.forgotPassword)
-    }
-}
-```
+| | Upstream | This fork |
+|---|---|---|
+| Transitions | SwiftUI `NavigationLink(isActive:)`, `.sheet` | UIKit `push` / `present` |
+| Platforms | iOS, tvOS, watchOS, macOS | iOS 15+ |
+| Screens | SwiftUI views | SwiftUI views **or** `UIViewController`s |
+| Entry | `view()` | `view()`, `viewController()`, `navigationController()` |
+| Routers | `@EnvironmentObject` router, `RouterStore`, `@RouterObject` | Removed — the environment does not cross a hosting controller boundary |
+| Lifecycle | — | `CoordinatorLifecycleAware` with reasons |
+| Duplicate pushes | Same route twice in a row was dropped | Not deduplicated, as in UIKit — debouncing is the app's job |
 
-To see this example in action, please check the MVVM-app in _Examples/MVVM_.
+**Migrating:** replace router injection with closures or constructor injection, and
+`hasRoot(_:)` now returns `AnyCoordinator` — call `.unwrap(MyCoordinator.self)`.
 
-## Customizing
+# Not supported 🚫
 
-Sometimes you'd want to customize the view generated by your coordinator. NavigationCoordinatable and TabCoordinatable have a `customize`-function you can implement in order to do so: 
-
-```swift
-final class AuthenticatedCoordinator: TabCoordinatable {
-    /* ... */
-    @ViewBuilder func customize(_ view: AnyView) -> some View {
-        view
-            .onReceive(Services.shared.$authentication) { authentication in
-                switch authentication {
-                case .authenticated:
-                    self.root(\.authenticated)
-                case .unauthenticated:
-                    self.root(\.unauthenticated)
-                }
-            }
-        }
-    }
-}
-```
-
-There is also a `ViewWrapperCoordinator` you can use to customize as well.
-
-## Chaining
-
-Since most functions on the coordinator/router return a coordinator, you can use the results and chain them together to perform more advanced routing, if needed. For instance, to create a SwiftUI buttons that will change the tab and select a specific todo from anywhere in the app after login:
-
-```swift
-VStack {
-    ForEach(todosStore.favorites) { todo in
-        Button(todo.name) {
-            authenticatedRouter
-                .focusFirst(\.todos)
-                .child
-                .popToRoot()
-                .route(to: \.todo, todo.id)
-        }
-    }
-}
-```
-
-The `AuthenticatedCoordinator` referenced by the `authenticatedRouter` is a `TabCoordinatable`, so the function will:
-
-* `focusFirst`: return the first tab represented by the route `todos` and make it the active tab, unless it already is the active one.
-* `child`: will return it's child, the `Todos`-tab is a `NavigationViewCoordinator` and the child is the `NavigationCoordinatable`.
-* `popToRoot`: will pop away any children that may or may not have been present.
-* `route`: will route to the route `Todo` with the specified id. 
-
-Since Stinsen uses KeyPaths to represent the routes, the functions are type-safe and invalid chains cannot be created. This means: if you have a route in _A_ to _B_ and in _B_ to _C_, the app will not compile if you try to route from _A_ to _C_ without routing to _B_ first. Also, you cannot perform actions such as `popToRoot()` on a `TabCoordinatable` and so on.
-
-## Deep Linking
-
-Using the returned values, you can easily deeplink within the app:
-
-```swift
-final class MainCoordinator: NavigationCoordinatable {
-    @ViewBuilder func customize(_ view: AnyView) -> some View {
-        view.onOpenURL { url in
-            if let coordinator = self.hasRoot(\.authenticated) {
-                do {
-                    // Create a DeepLink-enum
-                    let deepLink = try DeepLink(url: url, todosStore: coordinator.todosStore)
-                    
-                    switch deepLink {
-                    case .todo(let id):
-                        coordinator
-                            .focusFirst(\.todos)
-                            .child
-                            .route(to: \.todo, id)
-                    }
-                } catch {
-                    print(error.localizedDescription)
-                }
-            }
-        }
-    }
-}
-```
-
-## Creating your own Coordinatable
-
-_Stinsen_  comes with a couple of _Coordinatables_ for standard SwiftUI views. If you for instance want to use it for a Hamburger-menu, you need to create your own. Check the source-code to get some inspiration.
+* **SwiftUI environment across screens.** Each screen is its own hosting controller. Build
+  the `UIHostingController` yourself and inject there, or pass values in.
+* **Sharing one `UINavigationController` between sibling coordinators.** Parent → child
+  sharing is supported and intended; siblings are ambiguous about which stack a push means.
+* **State restoration across process death.** Deep links are replayed as routes instead.
+* **`NavigationStack(path:)` interop.** Do not mix.
+* **Non-iOS platforms.**
 
 # Installation 💾
 
-_Stinsen_ supports two ways of installation, Cocoapods and SPM. 
-
 ## SPM
 
-Open Xcode and your project, click `File / Swift Packages / Add package dependency...` .  In the textfield "_Enter package repository URL_", write `https://github.com/rundfunk47/stinsen` and press _Next_ twice
+`File / Add Package Dependencies…`, then this repository's URL.
 
-## Cocoapods
+## CocoaPods
 
-Create a `Podfile` in your app's root directory. Add
-```
+```ruby
 # Podfile
 use_frameworks!
 
@@ -292,31 +474,18 @@ target 'YOUR_TARGET_NAME' do
     pod 'Stinsen'
 end
 ```
-# Known issues and bugs 🐛
-
-* _Stinsen_ does not support `DoubleColumnNavigationViewStyle`. The reason for this is that it does not work as expected due to issues with `isActive` in SwiftUI. _Workaround:_ Use UIViewRepresentable or create your own implementation.
-* _Stinsen_ works pretty bad in various older versions of iOS 13 due to, well, iOS 13 not really being that good at SwiftUI. Rather than trying to set a minimum version that _Stinsen_ supports, you're on your own if you're supporting iOS 13 to figure out whether or not the features you use actually work. Generally, version 13.4 and above seem to work alright.
 
 # Who are responsible? 🙋🏿‍♂️
 
-At Byva we strive to create a 100% SwiftUI application, so it is natural that we needed to create a coordinator framework that satisfied this and other needs we have. The framework is used in production and manages ~50 flows and ~100 screens. The framework is maintained by [@rundfunk47](https://github.com/rundfunk47/).
+Upstream _Stinsen_ was created at Byva and is maintained by
+[@rundfunk47](https://github.com/rundfunk47/). This fork is maintained separately.
 
-# Why the name "Stinsen"? 🚂 
+# Why the name "Stinsen"? 🚂
 
-_Stins_ is short in Swedish for "Station Master", and _Stinsen_ is the definite article, "The Station Master". Colloquially the term was mostly used to refer to the Train Dispatcher, who is responsible for routing the trains. The logo is based on a wooden statue of a _stins_ that is located near the train station in Linköping, Sweden.
-
-# Updating from Stinsen v1 🚀
-
-The biggest change in Stinsen v2 is that it is more type-safe than Stinsen v1, which allows for easier chaining and deep-linking, among other things.
-
-* The Route-enum has been replaced with property wrappers. 
-* `AnyCoordinatable` has been replaced with a protocol. It does not perform the same duties as the old `AnyCoordinatable` and does not fit in with the more type-safe routing of version 2, so remove it from your project.
-* Enums are not used for routes, now _Stinsen_ uses keypaths. So instead of `route(to: .a)` we use `route(to: \.a)`.
-* CoordinatorView has been removed, use `.view()`.
-* Routers are specialized using the coordinator instead of the route.
-* Minor changes to functions and variable names.
-* Coordinators need to be marked as final.
-* ViewCoordinatable has been removed and folded into NavigationCoordinatable. Use multiple `@Root`s and switch between them using `.root()` to get the same functionality.
+_Stins_ is short in Swedish for "Station Master", and _Stinsen_ is the definite article,
+"The Station Master". Colloquially the term mostly referred to the Train Dispatcher, who
+is responsible for routing the trains. The logo is based on a wooden statue of a _stins_
+near the train station in Linköping, Sweden.
 
 # License 📃
 

@@ -4,10 +4,12 @@ import SwiftUI
 import Stinsen
 
 struct LoginScreen: View {
-    @EnvironmentObject private var mainRouter: MainCoordinator.Router
-    @EnvironmentObject private var unauthenticatedRouter: UnauthenticatedCoordinator.Router
     private let services: UnauthenticatedServices
-    
+
+    /// Supplied by the coordinator — see `UnauthenticatedCoordinator+Factory`.
+    private let onRegister: () -> Void
+    private let onForgotPassword: () -> Void
+
     @State private var username: String = "user@example.com"
     @State private var password: String = "password"
 
@@ -27,10 +29,10 @@ struct LoginScreen: View {
                     )
                 }
                 RoundedButton("Register", style: .secondary) {
-                    unauthenticatedRouter.route(to: \.registration)
+                    onRegister()
                 }
                 RoundedButton("Forgot your password?", style: .tertiary) {
-                    unauthenticatedRouter.route(to: \.forgotPassword)
+                    onForgotPassword()
                 }
             }
         }
@@ -38,13 +40,19 @@ struct LoginScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    init(services: UnauthenticatedServices) {
+    init(
+        services: UnauthenticatedServices,
+        onRegister: @escaping () -> Void,
+        onForgotPassword: @escaping () -> Void
+    ) {
         self.services = services
+        self.onRegister = onRegister
+        self.onForgotPassword = onForgotPassword
     }
 }
 
 struct LoginScreen_Previews: PreviewProvider {
     static var previews: some View {
-        LoginScreen(services: UnauthenticatedServices())
+        LoginScreen(services: UnauthenticatedServices(), onRegister: {}, onForgotPassword: {})
     }
 }

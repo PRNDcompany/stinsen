@@ -124,6 +124,45 @@ extension NavigationRoute where T: NavigationCoordinatable, Output == AnyView, U
     }
 }
 
+// MARK: - View controller overloads (RootSwitch)
+//
+// A root that is a plain `UIViewController`, for an app whose screens are UIKit. The
+// output is a `Screen` rather than the view controller itself because a route's output
+// has to be `ViewPresentable` — and conforming `UIViewController` to it retroactively
+// would collide with every app and library that does the same.
+//
+// Only `@Root` for now. `@Route` would need the same treatment across twelve
+// initialisers plus `focusFirst`'s input comparator, and the imperative
+// `route(_:to viewController:)` already covers routing to a UIKit screen.
+
+extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == Screen, U == RootSwitch {
+    public convenience init<VCOutput: UIViewController>(wrappedValue: @escaping ((T) -> (() -> VCOutput))) {
+        self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
+            return { _ in Screen.viewController(wrappedValue(coordinator)()) }
+        }))
+    }
+
+    public convenience init<VCOutput: UIViewController>(wrappedValue: @escaping ((T) -> (() -> VCOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
+            return { _ in Screen.viewController(wrappedValue(coordinator)()) }
+        }))
+    }
+}
+
+extension NavigationRoute where T: NavigationCoordinatable, Output == Screen, U == RootSwitch {
+    public convenience init<VCOutput: UIViewController>(wrappedValue: @escaping ((T) -> ((Input) -> VCOutput))) {
+        self.init(standard: Transition(type: RootSwitch(), closure: { coordinator in
+            return { input in Screen.viewController(wrappedValue(coordinator)(input)) }
+        }))
+    }
+
+    public convenience init<VCOutput: UIViewController>(wrappedValue: @escaping ((T) -> ((Input) -> VCOutput)), _ transition: AnyTransition, zOrder: RootLayer = .front) {
+        self.init(standard: Transition(type: RootSwitch(transition, zOrder: zOrder), closure: { coordinator in
+            return { input in Screen.viewController(wrappedValue(coordinator)(input)) }
+        }))
+    }
+}
+
 // MARK: - Coordinator overloads (RootSwitch, type-erased to AnyCoordinator)
 
 extension NavigationRoute where T: NavigationCoordinatable, Input == Void, Output == AnyCoordinator, U == RootSwitch {

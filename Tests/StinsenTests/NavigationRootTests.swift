@@ -5,8 +5,10 @@ import SwiftUI
 @MainActor
 final class NavigationRootTests: XCTestCase {
 
-    private func makeDummyItem(keyPath: Int = 0) -> NavigationRootItem {
-        NavigationRootItem(keyPath: keyPath, input: nil, child: AnyView(EmptyView()))
+    /// Named rather than declared: these tests are about slot mechanics, and a name is
+    /// the cheapest distinct identity to give two items that must not be confused.
+    private func makeDummyItem(_ name: String = "0") -> NavigationRootItem {
+        NavigationRootItem(route: .named(name), input: nil, child: AnyView(EmptyView()))
     }
 
     // MARK: - updateItem with animation
@@ -16,7 +18,7 @@ final class NavigationRootTests: XCTestCase {
         XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
@@ -30,7 +32,7 @@ final class NavigationRootTests: XCTestCase {
         XCTAssertEqual(root.slots.count, 1)
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
@@ -44,7 +46,7 @@ final class NavigationRootTests: XCTestCase {
         let initialZIndex = root.zIndex
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
@@ -57,7 +59,7 @@ final class NavigationRootTests: XCTestCase {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: nil,
             transition: .identity,
             zOrder: .front
@@ -74,9 +76,9 @@ final class NavigationRootTests: XCTestCase {
     }
 
     func testInitialSlotZeroHasItem() {
-        let root = NavigationRoot(item: makeDummyItem(keyPath: 42))
+        let root = NavigationRoot(item: makeDummyItem("42"))
         XCTAssertNotNil(root.slots[0].item)
-        XCTAssertEqual(root.slots[0].item.keyPath, 42)
+        XCTAssertEqual(root.slots[0].item.route, .named("42"))
     }
 
     func testActiveSlotTogglesOnAnimatedTransition() {
@@ -84,7 +86,7 @@ final class NavigationRootTests: XCTestCase {
         XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
@@ -94,26 +96,26 @@ final class NavigationRootTests: XCTestCase {
     }
 
     func testSlotsPreserveContentDuringTransition() {
-        let root = NavigationRoot(item: makeDummyItem(keyPath: 100))
+        let root = NavigationRoot(item: makeDummyItem("100"))
 
         root.updateItem(
-            makeDummyItem(keyPath: 200),
+            makeDummyItem("200"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
         )
 
         // Old slot still has A, new slot has B
-        XCTAssertEqual(root.slots[0].item.keyPath, 100)
-        XCTAssertEqual(root.slots[1].item.keyPath, 200)
+        XCTAssertEqual(root.slots[0].item.route, .named("100"))
+        XCTAssertEqual(root.slots[1].item.route, .named("200"))
     }
 
     func testNonAnimatedTransitionUpdatesSameSlot() {
-        let root = NavigationRoot(item: makeDummyItem(keyPath: 100))
+        let root = NavigationRoot(item: makeDummyItem("100"))
         XCTAssertEqual(root.activeSlotIndex, 0)
 
         root.updateItem(
-            makeDummyItem(keyPath: 200),
+            makeDummyItem("200"),
             animation: nil,
             transition: .identity,
             zOrder: .front
@@ -122,26 +124,26 @@ final class NavigationRootTests: XCTestCase {
         // activeSlotIndex should NOT toggle
         XCTAssertEqual(root.activeSlotIndex, 0)
         // Current slot updated in-place
-        XCTAssertEqual(root.slots[0].item.keyPath, 200)
+        XCTAssertEqual(root.slots[0].item.route, .named("200"))
     }
 
     func testAlternatingSlotTransitions() {
-        let root = NavigationRoot(item: makeDummyItem(keyPath: 1))
+        let root = NavigationRoot(item: makeDummyItem("1"))
 
         // A→B: slot 0→1
-        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("2"), animation: .easeIn, transition: .opacity, zOrder: .front)
         XCTAssertEqual(root.activeSlotIndex, 1)
-        XCTAssertEqual(root.slots[1].item.keyPath, 2)
+        XCTAssertEqual(root.slots[1].item.route, .named("2"))
 
         // B→C: slot 1→0
-        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("3"), animation: .easeIn, transition: .opacity, zOrder: .front)
         XCTAssertEqual(root.activeSlotIndex, 0)
-        XCTAssertEqual(root.slots[0].item.keyPath, 3)
+        XCTAssertEqual(root.slots[0].item.route, .named("3"))
 
         // C→D: slot 0→1
-        root.updateItem(makeDummyItem(keyPath: 4), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("4"), animation: .easeIn, transition: .opacity, zOrder: .front)
         XCTAssertEqual(root.activeSlotIndex, 1)
-        XCTAssertEqual(root.slots[1].item.keyPath, 4)
+        XCTAssertEqual(root.slots[1].item.route, .named("4"))
     }
 
     // MARK: - zOrder
@@ -150,7 +152,7 @@ final class NavigationRootTests: XCTestCase {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .front
@@ -165,7 +167,7 @@ final class NavigationRootTests: XCTestCase {
         let root = NavigationRoot(item: makeDummyItem())
 
         root.updateItem(
-            makeDummyItem(keyPath: 1),
+            makeDummyItem("1"),
             animation: .easeInOut,
             transition: .opacity,
             zOrder: .back
@@ -179,9 +181,9 @@ final class NavigationRootTests: XCTestCase {
     func testMultipleAnimatedTransitionsAccumulateZIndex() {
         let root = NavigationRoot(item: makeDummyItem())
 
-        root.updateItem(makeDummyItem(keyPath: 1), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.updateItem(makeDummyItem(keyPath: 2), animation: .easeIn, transition: .opacity, zOrder: .front)
-        root.updateItem(makeDummyItem(keyPath: 3), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("1"), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("2"), animation: .easeIn, transition: .opacity, zOrder: .front)
+        root.updateItem(makeDummyItem("3"), animation: .easeIn, transition: .opacity, zOrder: .front)
 
         XCTAssertEqual(root.zIndex, 3) // +1, +1, +1 = 3
     }

@@ -8,10 +8,18 @@ extension TodosCoordinator {
     }
     
     @ViewBuilder func makeCreateTodo() -> some View {
-        CreateTodoScreen(todosStore: todosStore)
+        // `[weak self]` matters: the coordinator owns this view through its stack, so a
+        // strong capture here would be coordinator → stack → view → coordinator.
+        CreateTodoScreen(todosStore: todosStore) { [weak self] in
+            self?.popToRoot()
+        }
     }
     
     @ViewBuilder func makeStart() -> some View {
-        TodosScreen(todosStore: todosStore)
+        TodosScreen(
+            todosStore: todosStore,
+            onCreateTodo: { [weak self] in self?.route(to: \.createTodo) },
+            onSelectTodo: { [weak self] id in self?.route(to: \.todo, id) }
+        )
     }
 }

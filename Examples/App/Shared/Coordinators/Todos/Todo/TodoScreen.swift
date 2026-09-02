@@ -5,7 +5,6 @@ import Stinsen
 struct TodoScreen: View {
     private let todoId: UUID
     
-    @EnvironmentObject private var todosRouter: TodosCoordinator.Router
     @ObservedObject private var todosStore: TodosStore
 
     var content: some View {

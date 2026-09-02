@@ -1,0 +1,926 @@
+//
+//  NavigationUITests.swift
+//  StinsenApp UI Tests
+//
+//  Real gestures and real UIKit transition timing. These cover what unit tests
+//  structurally cannot: interactive pop, sheet swipe-down, and the dismiss→present
+//  race, all of which depend on UIKit's actual animation lifecycle.
+//
+//  The app-side contract lives in `TestbedEnvironmentObjectScreen` — every
+//  accessibility identifier used here is declared there.
+//
+//  Screens are numbered by the coordinator's factory and each carries a *unique*
+//  identifier ("Screen-1", "Screen-2", ...). Assertions are existence-based on
+//  purpose: XCUITest query order is not z-order, so "the last ScreenSerial match"
+//  is not "the front screen" — a modal leaves the screen underneath in the tree and
+//  that assumption silently inverts.
+//
+
+import XCTest
+
+final class NavigationUITests: XCTestCase {
+
+    var app: XCUIApplication!
+
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launchArguments = ["--uitesting-authenticated"]
+
+        // The same suite, against either entry point.
+        //
+        // Run with `TEST_RUNNER_STINSEN_UIKIT_ENTRY=1` and the app boots from a
+        // `SceneDelegate` — `window.rootViewController = MainCoordinator().viewController()`
+        // — instead of a SwiftUI `App`. Nothing else changes: same screens, same routes,
+        // same assertions. That the tests do not need to know which one they are running
+        // against is the claim, and running them twice is the only way to check it.
+        if ProcessInfo.processInfo.environment["STINSEN_UIKIT_ENTRY"] == "1" {
+            app.launchArguments.append("--uikit-entry")
+        }
+
+        app.launch()
+        openTestbed()
+    }
+
+    override func tearDown() {
+        app = nil
+        super.tearDown()
+    }
+
+    // MARK: - Helpers
+
+    /// Screen numbers are per process, not per coordinator — a child coordinator is a
+    /// fresh instance and a per-instance counter would put a second "Screen-1" on
+    /// screen. That makes the testbed root's own number depend on what the app built
+    /// before it, so tests count from the root rather than from 1.
+    private var rootSerial = 1
+
+    /// The nth testbed screen, counting the testbed root as 1.
+    private func screen(_ offset: Int) -> XCUIElement {
+        app.staticTexts["Screen-\(rootSerial + offset - 1)"]
+    }
+
+    private func openTestbed() {
+        let tab = app.tabBars.buttons["Testbed"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 15), "Testbed tab never appeared")
+        tab.tap()
+
+        // Whatever number the root got, everything after it is relative to that.
+        guard poll(timeout: 10, until: { rawHighestVisibleSerial() != nil }),
+              let root = rawHighestVisibleSerial() else {
+            XCTFail("testbed root never appeared")
+            return
+        }
+        rootSerial = root
+        rootCoordinatorLabel = frontCoordinatorNumbers().first
+    }
+
+    /// The label of the coordinator that owns the testbed's root screen.
+    private var rootCoordinatorLabel: String?
+
+    /// The highest `Screen-N` present, by absolute number.
+    private func rawHighestVisibleSerial(max: Int = 40) -> Int? {
+        (1...max).reversed().first { app.staticTexts["Screen-\($0)"].exists }
+    }
+
+    /// Highest screen number currently present anywhere in the hierarchy.
+    /// Screens are numbered monotonically, so "a higher one appeared" is the same
+    /// question as "did the navigation actually happen".
+    private func highestVisibleSerial(max: Int = 40) -> Int? {
+        rawHighestVisibleSerial(max: max).map { $0 - rootSerial + 1 }
+    }
+
+    /// Polls `condition` until it holds or the deadline passes.
+    /// Every wait in this file goes through here so they cannot drift apart.
+    private func poll(timeout: TimeInterval, until condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            usleep(200_000)
+        } while Date() < deadline
+        return false
+    }
+
+    private func waitForSerialAbove(_ base: Int, timeout: TimeInterval) -> Bool {
+        poll(timeout: timeout) { (highestVisibleSerial() ?? 0) > base }
+    }
+
+    /// Samples the coordinator's own state and checks one of the labels it writes.
+    ///
+    /// Re-samples on every tick: the labels are only written when the sample button is
+    /// tapped, so polling after a single sample would re-read a frozen value and report
+    /// "never happened" for anything that happened late — exactly the timing these
+    /// tests exist to measure.
+    private func waitForSampledLabel(
+        _ identifier: String,
+        equals expected: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        poll(timeout: timeout) {
+            tapButton("SampleStackState")
+            return app.staticTexts.matching(identifier: identifier)
+                .allElementsBoundByIndex
+                .contains { $0.label == expected }
+        }
+    }
+
+    /// What the coordinator believes about its own stack, compared against what UIKit
+    /// actually shows.
+    private func waitForStackState(_ expected: String, timeout: TimeInterval) -> Bool {
+        waitForSampledLabel("StackState", equals: expected, timeout: timeout)
+    }
+
+    private func assertAppears(_ serial: Int, _ message: String,
+                               timeout: TimeInterval = 5,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(screen(serial).waitForExistence(timeout: timeout),
+                      message, file: file, line: line)
+    }
+
+    private func assertDisappears(_ serial: Int, _ message: String,
+                                  timeout: TimeInterval = 5,
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        let gone = expectation(for: NSPredicate(format: "exists == false"),
+                               evaluatedWith: screen(serial))
+        let result = XCTWaiter().wait(for: [gone], timeout: timeout)
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
+    }
+
+    /// Taps the button on the *frontmost* screen.
+    ///
+    /// Every testbed screen carries the same button identifiers, so `app.buttons[id]`
+    /// is ambiguous the moment a second screen exists — and the match it settles on is
+    /// often the one underneath, which is not hittable. Only the front screen's
+    /// controls are hittable, so that is the disambiguator.
+    ///
+    /// `ScrollView` also means a button can exist but sit below the fold, hence the
+    /// scroll attempts before giving up.
+    private func tapButton(_ identifier: String,
+                           file: StaticString = #filePath, line: UInt = #line) {
+        let query = app.buttons.matching(identifier: identifier)
+        XCTAssertTrue(query.firstMatch.waitForExistence(timeout: 5),
+                      "button \(identifier) not found", file: file, line: line)
+
+        // The testbed screen is several screenfuls long, so scroll generously — and in
+        // both directions. Scrolling only downwards means that once a test has reached a
+        // button near the bottom, everything above it is unreachable for the rest of the
+        // test, which fails as "button not found" a long way from the cause.
+        for attempt in 0...17 {
+            if let hittable = query.allElementsBoundByIndex.first(where: { $0.isHittable }) {
+                hittable.tap()
+                return
+            }
+            if attempt < 9 { app.swipeUp() } else { app.swipeDown() }
+        }
+        XCTFail("no hittable '\(identifier)' button on the front screen", file: file, line: line)
+    }
+
+
+    /// Opens the scenarios screen.
+    ///
+    /// The one-off scenario controls moved off the testbed screen: that screen is
+    /// self-similar — a push shows another one of it — so every control on it was
+    /// duplicated at every depth, and it had grown past thirty of them.
+    ///
+    /// The scenarios screen takes no serial of its own, so serial expectations either
+    /// side of this call are unchanged.
+    private func openScenarios() {
+        tapButton("ShowScenarios")
+    }
+
+    // MARK: - Back-to-back navigation (the class of defect this refactor targets)
+
+    /// Two navigation operations issued in the same run loop tick — what an app does
+    /// when a completion handler routes straight after a dismissal.
+    ///
+    /// Nothing serialises these today: each call mutates the stack and the observers
+    /// act synchronously, so the second operation is issued while the first one's
+    /// UIKit transition is still animating. Whether it survives depends on UIKit's
+    /// tolerance for that specific pairing — which is how a screen silently stops
+    /// appearing on one iOS version but not another.
+    ///
+    /// Every combo ends in an operation that must produce a new screen, so the pass
+    /// condition is uniform: a screen with a higher serial must appear.
+    ///
+    /// Measured on iOS 18.5: `Present → Present` (the pairing originally suspected)
+    /// currently survives, so this is a matrix rather than a single repro. The queue
+    /// in stage 3 makes the guarantee hold for every pairing rather than leaving it
+    /// to UIKit's discretion.
+    func testBackToBackNavigation_secondOperationTakesEffect() {
+        let combos = [
+            "PopThenPush", "PopThenPresent",
+            "PopToRootThenPush", "PopToRootThenPresent",
+            "PushThenPush", "PushThenPresent",
+            "PresentThenPush", "PresentThenPresent",
+        ]
+
+        var survived: [String] = []
+        var dropped: [String] = []
+
+        for combo in combos {
+            // Relaunch rather than popToRoot between combos. L11 means popToRoot can
+            // leave a modal on screen, and a half-reset state makes every later combo
+            // report a failure it did not cause.
+            app.terminate()
+            app.launch()
+            openTestbed()
+
+            // Each combo starts from a screen it can pop from, so the "pop first"
+            // pairings have something to remove.
+            tapButton("ShowPush")
+            guard let base = highestVisibleSerial() else {
+                XCTFail("\(combo): could not establish a base screen")
+                continue
+            }
+
+            openScenarios()
+            tapButton("Combo-" + combo)
+
+            if waitForSerialAbove(base, timeout: 4) {
+                survived.append(combo)
+            } else {
+                dropped.append(combo)
+            }
+        }
+
+        XCTAssertTrue(dropped.isEmpty,
+            "these pairings dropped their second operation: \(dropped) (survived: \(survived))")
+    }
+
+    // MARK: - Gestures (only reachable through XCUITest)
+
+    func testInteractiveBackSwipe_completed_returnsToPreviousScreen() {
+        tapButton("ShowPush")
+        assertAppears(2, "push should have appeared")
+
+        // Full edge swipe left→right completes the pop.
+        // A fast flick often does not register as an interactive pop at all, which
+        // makes the assertion meaningless — drag slowly and hold at the end so UIKit
+        // actually drives `interactivePopGestureRecognizer`.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        start.press(forDuration: 0.15, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+
+        assertDisappears(2, "completed back swipe must pop the pushed screen")
+        XCTAssertTrue(screen(1).exists, "root screen must be back")
+
+        // The screen is gone. Does the coordinator know?
+        //
+        // This is the most common navigation action in any iOS app, and it is a
+        // UIKit-initiated pop — exactly the category that
+        // `testUIKitPop_bypassingTheCoordinator_keepsTheStackInSync` shows going
+        // unnoticed. If the stack stays stale here, every later route/pop is computed
+        // against a screen the user already dismissed.
+        XCTAssertTrue(waitForStackState("empty", timeout: 5),
+            "coordinator's stack must catch up with a back-swipe pop")
+    }
+
+    func testInteractiveBackSwipe_cancelled_staysOnScreen() {
+        tapButton("ShowPush")
+        assertAppears(2, "push should have appeared")
+
+        // Short drag that does not pass the threshold — UIKit cancels the pop.
+        //
+        // Note this assertion is only meaningful because
+        // `testInteractiveBackSwipe_completed_returnsToPreviousScreen` proves the same
+        // gesture mechanism *can* pop. On its own, "screen 2 is still there" would also
+        // pass if the gesture never registered at all.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        start.press(forDuration: 0.15, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+
+        // Give the cancel animation time to settle, then confirm nothing was popped.
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(screen(2).exists, "cancelled back swipe must not pop")
+    }
+
+    func testSheetSwipeDown_dismissesTheModal() {
+        tapButton("ShowModal")
+        assertAppears(2, "modal should have appeared")
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: end)
+
+        assertDisappears(2, "swiping the sheet down must dismiss it")
+    }
+
+    // MARK: - Lifecycle
+
+    /// Whatever the coordinator was last told, sampled now. Used in failure messages so
+    /// a mismatch says what actually happened instead of only that it did not match.
+    private func currentLifecycle() -> String {
+        tapButton("SampleStackState")
+        let labels = app.staticTexts.matching(identifier: "LifecycleState")
+        return labels.allElementsBoundByIndex.map(\.label).joined(separator: " | ")
+    }
+
+    /// The most recent lifecycle event the coordinator was told about.
+    private func waitForLifecycle(_ expected: String, timeout: TimeInterval) -> Bool {
+        waitForSampledLabel("LifecycleState", equals: expected, timeout: timeout)
+    }
+
+    /// Whether `expected` appears anywhere in the log since it was last cleared.
+    ///
+    /// "The last event" is no longer the right question. The coordinator's root screen
+    /// reports its own lifecycle now, so a closed screen is routinely followed by the
+    /// one underneath reappearing — a back swipe genuinely ends on `didAppear`. Tests
+    /// therefore clear the log, perform one action, and ask what that action reported.
+    private func waitForLifecycleTrail(toContain expected: String, timeout: TimeInterval) -> Bool {
+        poll(timeout: timeout) {
+            tapButton("SampleStackState")
+            return app.staticTexts.matching(identifier: "LifecycleTrail")
+                .allElementsBoundByIndex
+                .contains { $0.label.contains(expected) }
+        }
+    }
+
+    /// The trail as currently sampled, for failure messages.
+    private func currentLifecycleTrail() -> String {
+        tapButton("SampleStackState")
+        return app.staticTexts.matching(identifier: "LifecycleTrail")
+            .allElementsBoundByIndex.map(\.label).joined(separator: " | ")
+    }
+
+    /// Does the probe actually fire, and does it say *why* a screen went away?
+    ///
+    /// Nothing before this could answer either question: dismissal was inferred from
+    /// `deinit`, which arrives whenever ARC gets round to it and carries no reason.
+    func testLifecycle_pushReportsAppearance() {
+        tapButton("ShowPush")
+        assertAppears(2, "push should have appeared")
+
+        XCTAssertTrue(waitForLifecycle("didAppear", timeout: 5),
+            "the probe must report the pushed screen appearing")
+    }
+
+    /// A screen that is merely covered by a modal is still on the stack — the reason
+    /// has to distinguish that from being closed. Today the two are indistinguishable.
+    func testLifecycle_modalReportsCoveredForTheScreenBeneath() {
+        tapButton("ShowModal")
+        assertAppears(2, "modal should have appeared")
+
+        // Sampled on the modal, which reports its own appearance; the screen underneath
+        // is the one that got covered.
+        XCTAssertTrue(waitForLifecycle("didAppear", timeout: 5),
+            "the probe must report the modal appearing")
+    }
+
+    /// Swiping a sheet away must be reported as a dismissal, not merely "it's gone".
+    func testLifecycle_sheetSwipeDownReportsDismissed() {
+        tapButton("ShowModal")
+        assertAppears(2, "modal should have appeared")
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        assertDisappears(2, "sheet must be dismissed")
+
+        XCTAssertTrue(waitForLifecycle("didDisappear(dismissed)", timeout: 5),
+            "a swiped-away sheet must be reported as .dismissed")
+    }
+
+    /// A completed back swipe must be reported as a pop, with that reason.
+    func testLifecycle_backSwipeReportsPopped() {
+        tapButton("ShowPush")
+        assertAppears(2, "push should have appeared")
+        // Clear first, so what follows is only what the swipe caused.
+        tapButton("ResetLifecycleLog")
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        start.press(forDuration: 0.15, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+        assertDisappears(2, "back swipe must pop")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "a back-swiped screen must be reported as .popped, got: \(currentLifecycleTrail())")
+    }
+
+    /// Does the probe work for a **custom** presentation?
+    ///
+    /// The testbed's overlay attaches its screen by child containment instead of
+    /// presenting it, which is the shape most likely to break reporting: such a view
+    /// controller is never "being dismissed", and it is only "moving from parent" if
+    /// the app's own teardown does proper containment removal.
+    ///
+    /// Built-in push and modal are already measured. This is the case that was assumed
+    /// rather than checked.
+    func testLifecycle_customContainmentPresentation_reportsAppearance() {
+        openScenarios()
+        tapButton("ShowCustomOverlay")
+        assertAppears(2, "custom overlay should have appeared")
+
+        XCTAssertTrue(waitForLifecycle("didAppear", timeout: 5),
+            "the probe must see a containment-based custom presentation, got: \(currentLifecycle())")
+    }
+
+    func testLifecycle_customContainmentPresentation_reportsRemoval() {
+        openScenarios()
+        tapButton("ShowCustomOverlay")
+        assertAppears(2, "custom overlay should have appeared")
+        _ = waitForLifecycle("didAppear", timeout: 5)
+
+        tapButton("ResetLifecycleLog")
+        tapButton("PopLast")
+        assertDisappears(2, "custom overlay must be removed")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "containment removal must report a reason, got: \(currentLifecycleTrail())")
+    }
+
+    // MARK: - Staying in sync with UIKit
+
+    /// Does the coordinator notice when something *outside* it closes a screen?
+    ///
+    /// This is the load-bearing question for the whole refactor. Anything can close a
+    /// view controller — a UIKit parent, a system flow, third-party code, an app that
+    /// kept its own reference. If the coordinator only learns about closures it
+    /// initiated, its stack drifts from reality and every later pop targets the wrong
+    /// screen.
+    ///
+    /// Today the only signal is `LifecycleObject.deinit`, so the answer depends on ARC:
+    /// it arrives late, in no particular order, and never at all if anything is still
+    /// retaining the view controller.
+    func testUIKitDismiss_bypassingTheCoordinator_keepsTheStackInSync() {
+        tapButton("ShowModal")
+        assertAppears(2, "modal should have appeared")
+        XCTAssertTrue(waitForStackState("nonempty", timeout: 3),
+                      "precondition: coordinator should know it has a screen")
+        tapButton("UIKitDismissBypass")
+        assertDisappears(2, "UIKit dismiss must close the modal")
+
+        // The screen is visually gone. Does the coordinator agree?
+        // Sampled after a settle delay so a late ARC-driven callback still counts.
+        XCTAssertTrue(waitForStackState("empty", timeout: 5),
+            "coordinator's stack must catch up with a dismissal it did not initiate")
+    }
+
+    func testUIKitPop_bypassingTheCoordinator_keepsTheStackInSync() {
+        tapButton("ShowPush")
+        assertAppears(2, "push should have appeared")
+        XCTAssertTrue(waitForStackState("nonempty", timeout: 3),
+                      "precondition: coordinator should know it has a screen")
+        tapButton("UIKitPopBypass")
+        assertDisappears(2, "UIKit pop must remove the pushed screen")
+
+        XCTAssertTrue(waitForStackState("empty", timeout: 5),
+            "coordinator's stack must catch up with a pop it did not initiate")
+    }
+
+    // MARK: - Unwinding across a presentation boundary
+
+    /// L11 (fixed) — `popToRoot()` used to clear the stack and leave the modal on screen.
+    ///
+    /// push → modal, then a single popToRoot. The unwind has to cross a presentation
+    /// boundary rather than just walk a navigation stack. `popToIndex` could not: it
+    /// emptied the coordinator's array while UIKit went on showing the modal, and every
+    /// later operation then reasoned about a stack the user could not see.
+    ///
+    /// `unwind` dismisses from the lowest presentation boundary's presenter and pops the
+    /// remaining navigation run underneath the outgoing modal, so this is one transition
+    /// rather than two, with no intermediate screen flashing between them.
+    func testMixedChain_popToRoot_returnsToRoot() {
+        openScenarios()
+        tapButton("BuildMixedChain")
+        assertAppears(3, "expected root → push → modal")
+
+        tapButton("PopToRoot")
+
+        assertDisappears(3, "popToRoot must dismiss the modal")
+        assertDisappears(2, "popToRoot must also pop the pushed screen")
+        XCTAssertTrue(screen(1).exists, "root screen must be back")
+    }
+
+    // MARK: - Routing to a coordinator
+
+    /// The coordinator number owning the frontmost screen, or nil if unreadable.
+    ///
+    /// Routing to a coordinator hands the flow to a different object with its own host,
+    /// and nothing in the screen contents says so. Without this a "child coordinator"
+    /// test would pass just as happily if the parent had pushed the screen itself.
+    private func frontCoordinatorNumbers() -> [String] {
+        app.staticTexts.matching(identifier: "CoordinatorID")
+            .allElementsBoundByIndex.map(\.label)
+    }
+
+    /// Asserts some screen on the hierarchy belongs to a coordinator other than the one
+    /// owning the testbed root. Which number it got depends on what the app built first,
+    /// so the assertion is "someone else", not "number two".
+    private func assertADifferentCoordinatorIsPresent(
+        _ message: String,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let labels = frontCoordinatorNumbers()
+        XCTAssertTrue(labels.contains { $0 != rootCoordinatorLabel },
+                      "\(message) — saw \(labels), root is \(rootCoordinatorLabel ?? "unknown")",
+                      file: file, line: line)
+    }
+
+    /// A pushed child coordinator, driving screens of its own.
+    ///
+    /// This shares one `UINavigationController` between parent and child, which is the
+    /// supported direction of sharing — the parent's rewind is meant to take the child's
+    /// screens with it. Nothing covered it: no test pressed this button, and the wrapper
+    /// unit tests only check construction.
+    func testPushCoordinator_childDrivesItsOwnScreens() {
+        openScenarios()
+        tapButton("ShowPushCoordinator")
+        assertAppears(2, "the child coordinator's root screen should have been pushed")
+
+        assertADifferentCoordinatorIsPresent("the pushed screen must belong to a new coordinator")
+
+        // The child pushes into the navigation controller it shares with its parent.
+        tapButton("ShowPush")
+        assertAppears(3, "the child coordinator must be able to push")
+
+        tapButton("PopLast")
+        assertDisappears(3, "the child must be able to rewind its own screen")
+        XCTAssertTrue(screen(2).exists, "the child's root screen must still be there")
+    }
+
+    /// `dismissCoordinator()` from inside the child: the child asks its parent to close
+    /// it, and the parent has to recognise it despite the route having erased it to
+    /// `AnyCoordinator` on the way in.
+    func testPushCoordinator_dismissCoordinatorClosesTheChild() {
+        openScenarios()
+        tapButton("ShowPushCoordinator")
+        assertAppears(2, "the child coordinator's root screen should have been pushed")
+
+        tapButton("DismissCoordinator")
+
+        assertDisappears(2, "dismissCoordinator() must close the child")
+        XCTAssertTrue(app.staticTexts["ScenariosScreen"].exists,
+                      "back to the screen it was opened from")
+
+        // The scenarios screen is itself on the coordinator's stack, so "nothing left
+        // open" is only true once that is closed as well.
+        tapButton("PopLast")
+        XCTAssertTrue(waitForStackState("empty", timeout: 5),
+            "the parent must know the child is gone")
+    }
+
+    /// A child wrapped in `NavigationViewCoordinator` and presented modally.
+    ///
+    /// The wrapper is a coordinator that is not a `NavigationCoordinatable` — it only
+    /// decorates one — so both the host binding and the teardown cascade have to pass
+    /// through it. It also produces the shape that broke `PresentThenPush`: the
+    /// `UINavigationController` ends up *inside* the presented hosting controller rather
+    /// than above it.
+    func testModalCoordinator_childPushesInsideItsOwnNavigationView() {
+        openScenarios()
+        tapButton("ShowModalCoordinator")
+        assertAppears(2, "the wrapped coordinator's root screen should have been presented")
+
+        assertADifferentCoordinatorIsPresent("the modal must belong to a new coordinator")
+
+        // Must push into the modal's own navigation controller, not the app's.
+        tapButton("ShowPush")
+        assertAppears(3, "the wrapped coordinator must be able to push inside its modal")
+
+        tapButton("PopLast")
+        assertDisappears(3, "the wrapped coordinator must be able to rewind")
+    }
+
+    func testModalCoordinator_dismissCoordinatorClosesTheWrappedChild() {
+        openScenarios()
+        tapButton("ShowModalCoordinator")
+        assertAppears(2, "the wrapped coordinator's root screen should have been presented")
+
+        tapButton("DismissCoordinator")
+
+        assertDisappears(2, "dismissCoordinator() must close the wrapped child")
+
+        tapButton("PopLast")
+        XCTAssertTrue(waitForStackState("empty", timeout: 5),
+            "the parent must know the wrapped child is gone")
+    }
+
+    /// The parent rewinding past a child takes the child's screens with it.
+    ///
+    /// This is the cascade: UIKit removes the child's screens, but it removes them from
+    /// a hierarchy the *child's* host is not watching, so without an explicit hand-off
+    /// the child would go on believing they were open.
+    func testPushCoordinator_parentPopToRootTakesTheChildsScreensWithIt() {
+        openScenarios()
+        tapButton("ShowPushCoordinator")
+        assertAppears(2, "the child coordinator's root screen should have been pushed")
+        tapButton("ShowPush")
+        assertAppears(3, "the child pushed a screen of its own")
+
+        // PopToRoot on the front screen is the *child's* — it only clears the child's own
+        // stack. Reaching the parent's means going through the child's root screen.
+        tapButton("PopToRoot")
+        assertDisappears(3, "the child's own screen goes first")
+
+        tapButton("DismissCoordinator")
+        assertDisappears(2, "and then the child itself")
+        XCTAssertTrue(app.staticTexts["ScenariosScreen"].exists,
+                      "back to the screen it was opened from")
+    }
+
+    // MARK: - Root switching
+
+    /// Switching root has to take the open screens with it.
+    ///
+    /// A root switch is a flow-level change — signing out, finishing onboarding — and the
+    /// screens the user had open belong to the flow that is ending. Leaving them up means
+    /// the coordinator's records describe screens from a root that no longer exists, and
+    /// every later pop is computed against them.
+    func testRootSwitch_removesScreensFromTheOldRoot() {
+        tapButton("ShowPush")
+        assertAppears(2, "a screen is open when the root changes")
+
+        openScenarios()
+        tapButton("SwitchRoot")
+
+        // In this order on purpose: a covered root is not in the accessibility tree at
+        // all, so "did the root change" is unanswerable until the screen above it is
+        // gone. The screen going away is also the thing being tested.
+        assertDisappears(2, "switching root must take the pushed screen with it")
+        XCTAssertTrue(app.staticTexts["AlternateRoot"].waitForExistence(timeout: 5),
+                      "the new root must be what is left")
+    }
+
+    /// A root declared as a plain `UIViewController`.
+    ///
+    /// `@Root var uikitStart = makeUIKitStart` where the factory returns a view
+    /// controller: the whole flow can now be UIKit from the root down, with no SwiftUI
+    /// view anywhere in it.
+    func testRootSwitch_toAUIKitRoot() {
+        openScenarios()
+        tapButton("SwitchToUIKitRoot")
+
+        XCTAssertTrue(app.staticTexts["UIKitRoot"].waitForExistence(timeout: 5),
+                      "a view controller must be able to be the root")
+        assertDisappears(1, "the SwiftUI root it replaced must be gone")
+    }
+
+    // MARK: - Lifecycle guarantees
+
+    /// Every disappearance reason, pinned.
+    ///
+    /// `reason(for:)` is inference — `isBeingDismissed`, `isMovingFromParent`, whether
+    /// the navigation controller still holds the screen, whether its view has a window.
+    /// It is right for the paths measured on this OS, and `isMovingFromParent` reading
+    /// `false` after an interactive pop is the sort of thing that was only ever found by
+    /// running it. Nothing about that is guaranteed to survive an OS update, so each
+    /// reason gets a test: a change should turn something red rather than quietly report
+    /// the wrong thing.
+    func testLifecycle_coveredIsReportedForTheScreenUnderneath() {
+        tapButton("ResetLifecycleLog")
+        tapButton("ShowPush")
+        assertAppears(2, "push")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(covered)", timeout: 5),
+            "a screen with something pushed over it is covered, not closed, got: \(currentLifecycleTrail())")
+    }
+
+    /// A screen removed while it was already out of sight.
+    ///
+    /// `popToRoot` from two screens deep closes both, but UIKit only announces the top
+    /// one — the lower screen had its disappearance when it was covered and gets no
+    /// second one. So the two are reported differently for the same event, which is the
+    /// documented non-uniformity `isClosed` exists to paper over.
+    func testLifecycle_detachedIsReportedForAScreenRemovedWhileHidden() {
+        tapButton("ShowPush")
+        assertAppears(2, "first screen")
+        tapButton("ShowPush")
+        assertAppears(3, "second screen, covering the first")
+
+        tapButton("ResetLifecycleLog")
+        tapButton("PopToRoot")
+        assertDisappears(2, "both screens close")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(detached)", timeout: 5),
+            "the covered screen must still be reported, got: \(currentLifecycleTrail())")
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "the visible screen keeps its accurate reason, got: \(currentLifecycleTrail())")
+    }
+
+    /// Lifecycle survives an app rebuilding the screen's containment.
+    ///
+    /// The probe is a child view controller, and `children` belongs to the screen. An app
+    /// that manages its own child controllers can remove it without knowing, and the
+    /// failure is silent in the worst way: navigation keeps working — liveness comes from
+    /// UIKit, not from the probe — while lifecycle reporting stops for that screen.
+    func testLifecycle_survivesTheProbeBeingRemoved() {
+        tapButton("ShowPush")
+        assertAppears(2, "push")
+        tapButton("StripChildControllers")
+        tapButton("ResetLifecycleLog")
+
+        tapButton("PopLast")
+        assertDisappears(2, "popping still works — it never depended on the probe")
+
+        // Reporting resumes, which is what the recovery is for. The *reason* is asserted
+        // loosely on purpose: a rebuilt probe never observed the appearance it would
+        // normally reason from, and measurement shows it can land on a less accurate
+        // reason than the original would have. Seeding it with the screen's current state
+        // narrows that but does not close it, and pinning the exact reason here would be
+        // pinning the approximation rather than the behaviour.
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear", timeout: 5),
+            "the probe must have been put back, got: \(currentLifecycleTrail())")
+    }
+
+    // MARK: - Hand-built hosting controllers
+
+    /// A `UIHostingController` the app built itself, with its own environment.
+    ///
+    /// This is how SwiftUI content gets an environment across a screen boundary: the
+    /// environment does not survive a hosting controller boundary, so a screen that needs
+    /// one builds its own controller and injects it there. The coordinator neither knows
+    /// nor cares — it is a view controller like any other.
+    func testOwnHostingController_keepsItsInjectedEnvironment() {
+        openScenarios()
+        tapButton("ShowOwnHostingController")
+        assertAppears(2, "the app's own hosting controller is a screen like any other")
+
+        XCTAssertTrue(app.staticTexts["InjectedNote"].label == "injected",
+                      "the environment the app injected must survive, got: \(app.staticTexts["InjectedNote"].label)")
+
+        tapButton("PopLast")
+        assertDisappears(2, "and it pops like any other")
+    }
+
+    // MARK: - UIKit tabs
+
+    /// A tab coordinator hosted as a real `UITabBarController`.
+    ///
+    /// A UIKit app hosting a SwiftUI `TabView` gets a tab bar it cannot reach: no
+    /// `UITabBarItem` to configure, no delegate to hook. The same `TabChild` drives both
+    /// renderings, so `focusFirst`, `selectTab` and the re-tap callback are unchanged.
+    func testUIKitTabs_switchTabs() {
+        openScenarios()
+        tapButton("ShowUIKitTabs")
+
+        XCTAssertTrue(app.staticTexts["TabOneContent"].waitForExistence(timeout: 5),
+                      "the tab bar controller should start on its first tab")
+
+        let secondTab = app.tabBars.buttons["Two"]
+        XCTAssertTrue(secondTab.waitForExistence(timeout: 5),
+                      "the UITabBarItem declared by the route must be what the tab bar shows")
+        secondTab.tap()
+
+        XCTAssertTrue(app.staticTexts["TabTwoContent"].waitForExistence(timeout: 5),
+                      "tapping a tab must switch the content")
+    }
+
+    // MARK: - UIKit screens
+
+    /// A plain `UIViewController` routed to like any other screen.
+    ///
+    /// The transition engine has been UIKit's for a while, but every screen still had to
+    /// be a SwiftUI view: `route(_:to:)` took a `View`, and the built-in presentations
+    /// were typed to the hosting controller they built, so an app-supplied view
+    /// controller could not get through at all.
+    func testUIKitScreen_pushesAndPops() {
+        openScenarios()
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "a UIKit screen must push like any other")
+        XCTAssertTrue(app.staticTexts["ScreenKind"].exists,
+                      "the pushed screen should be the UIKit one")
+
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "popLast() must pop a UIKit screen")
+        XCTAssertTrue(app.staticTexts["ScenariosScreen"].exists,
+                      "back to the screen it was opened from")
+    }
+
+    func testUIKitScreen_presentsAsModal() {
+        openScenarios()
+        tapButton("ShowUIKitModal")
+        assertAppears(2, "a UIKit screen must present like any other")
+
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "popLast() must dismiss a UIKit modal")
+    }
+
+    /// A chain that alternates runtimes.
+    ///
+    /// A stack whose screens are all one kind proves much less: what matters is that the
+    /// host reads the hierarchy the same way regardless of what built each screen, since
+    /// its liveness check, its presentation context and its unwind all work on view
+    /// controllers and never ask which runtime produced them.
+    func testMixedRuntimeChain_unwindsInOneGo() {
+        openScenarios()
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "UIKit screen")
+
+        tapButton("UIKitPushSwiftUI")
+        assertAppears(3, "SwiftUI screen pushed from a UIKit one")
+
+        openScenarios()
+        tapButton("ShowUIKitScreen")
+        assertAppears(4, "UIKit screen pushed from a SwiftUI one")
+
+        tapButton("UIKitPopToRoot")
+        assertDisappears(4, "popToRoot must clear the whole mixed chain")
+        assertDisappears(3, "…including the SwiftUI screen in the middle")
+        assertDisappears(2, "…and the UIKit one at the bottom")
+        XCTAssertTrue(screen(1).exists, "root screen must be back")
+    }
+
+    /// A UIKit screen reports its lifecycle like any other.
+    ///
+    /// Nothing was added to the view controller to make this work — the probe is a child
+    /// view controller, and UIKit forwards appearance callbacks to children by default.
+    func testUIKitScreen_reportsLifecycle() {
+        tapButton("ResetLifecycleLog")
+        openScenarios()
+        tapButton("ShowUIKitScreen")
+        assertAppears(2, "UIKit screen")
+
+        tapButton("UIKitPopLast")
+        assertDisappears(2, "the UIKit screen closes")
+
+        XCTAssertTrue(waitForLifecycleTrail(toContain: "didDisappear(popped)", timeout: 5),
+            "a popped UIKit screen must be reported as .popped, got: \(currentLifecycleTrail())")
+    }
+
+    // MARK: - Embedding a coordinator as a child
+
+    /// A coordinator's screens living inside something else, rather than being routed to.
+    ///
+    /// Four combinations, because the two choices are independent: the host decides
+    /// whether it asks for `view()` or `viewController()`, and the coordinator decides
+    /// what its screens are made of. Testing one and assuming the rest is how three of
+    /// them stay broken quietly — an embedded coordinator that renders but cannot
+    /// navigate looks exactly like one that works.
+    private func assertEmbedding(
+        _ button: String,
+        flowMarker: String,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        openScenarios()
+        tapButton(button)
+
+        XCTAssertTrue(app.staticTexts["EmbeddingHost"].waitForExistence(timeout: 5),
+                      "the host should have been pushed", file: file, line: line)
+        XCTAssertTrue(app.staticTexts[flowMarker].waitForExistence(timeout: 5),
+                      "the embedded coordinator's screen should be inside it",
+                      file: file, line: line)
+
+        // Rendering is the easy half. The embedded coordinator has to be able to drive
+        // its own navigation from inside someone else's view — which means its own host,
+        // its own anchor and its own records, not the surrounding coordinator's.
+        tapButton("EmbeddedFlowPresent")
+        XCTAssertTrue(app.staticTexts["EmbeddedFlowPresented"].waitForExistence(timeout: 5),
+                      "the embedded coordinator must be able to present",
+                      file: file, line: line)
+    }
+
+    func testEmbedding_swiftUIHost_swiftUIFlow() {
+        assertEmbedding("EmbedSwiftUIInSwiftUI", flowMarker: "EmbeddedSwiftUIFlow")
+    }
+
+    func testEmbedding_swiftUIHost_uiKitFlow() {
+        assertEmbedding("EmbedUIKitInSwiftUI", flowMarker: "EmbeddedUIKitFlow")
+    }
+
+    func testEmbedding_uiKitHost_swiftUIFlow() {
+        assertEmbedding("EmbedSwiftUIInUIKit", flowMarker: "EmbeddedSwiftUIFlow")
+    }
+
+    /// UIKit → UIKit stays native: the coordinator container installs the app's root view
+    /// controller directly, so there is no representable/hosting round trip to distort its
+    /// safe area or move its controls behind the tab bar.
+    func testEmbedding_uiKitHost_uiKitFlow() {
+        assertEmbedding("EmbedUIKitInUIKit", flowMarker: "EmbeddedUIKitFlow")
+    }
+
+    // MARK: - Re-entry
+
+    /// L10 (fixed) — `popLast()` used to do nothing on the first pushed screen.
+    ///
+    /// The default dismiss handler decided between popping and dismissing with
+    /// `navigationController.viewControllers.count > 2`. With a root plus one pushed
+    /// screen the count is exactly 2, so it fell through to
+    /// `viewController.dismiss(animated:)` — a no-op on a *pushed* view controller. The
+    /// screen simply stayed.
+    ///
+    /// Fixed twice over: `unwind` pops through `popToViewController` and never consults
+    /// that handler for a built-in presentation, and the threshold itself is now `> 1`
+    /// for the app code that still calls the handler directly.
+    func testPushPopPush_reEntersCleanly() {
+        tapButton("ShowPush")
+        assertAppears(2, "first push")
+
+        tapButton("PopLast")
+        assertDisappears(2, "popLast() must pop the first pushed screen")
+
+        tapButton("ShowPush")
+        assertAppears(3, "pushing again after a pop must work")
+    }
+
+    func testModalDismissModal_reEntersCleanly() {
+        tapButton("ShowModal")
+        assertAppears(2, "first modal")
+
+        tapButton("PopLast")
+        assertDisappears(2, "dismiss")
+
+        tapButton("ShowModal")
+        assertAppears(3, "presenting again after a dismiss must work")
+    }
+}
