@@ -115,6 +115,20 @@ final class TabCoordinatableTests: XCTestCase {
         XCTAssertNotNil(child.allItems)
         XCTAssertTrue(child.allItems.isEmpty)
     }
+
+    // MARK: - Memory Tests
+
+    func testTabCoordinatorIsReleasedAfterSetupAllTabs() {
+        weak var weakCoordinator: ReleaseTestTabCoordinator?
+
+        autoreleasepool {
+            let coordinator = ReleaseTestTabCoordinator()
+            coordinator.setupAllTabs()
+            weakCoordinator = coordinator
+        }
+
+        XCTAssertNil(weakCoordinator)
+    }
 }
 
 // MARK: - Test Helpers
@@ -122,4 +136,21 @@ final class TabCoordinatableTests: XCTestCase {
 @MainActor
 final class ImperativeTabCoordinator: TabCoordinatable {
     let child = TabChild(activeTab: 0)
+}
+
+@MainActor
+private final class ReleaseTestTabCoordinator: TabCoordinatable {
+    var child = TabChild(startingItems: [\ReleaseTestTabCoordinator.first])
+
+    @Route(tabItem: makeTabItem, onTapped: onTappedFirst) var first = makeFirst
+
+    func makeFirst() -> some View {
+        EmptyView()
+    }
+
+    @ViewBuilder func makeTabItem(isActive: Bool) -> some View {
+        EmptyView()
+    }
+
+    func onTappedFirst(_ isRepeat: Bool, view: AnyView) {}
 }
